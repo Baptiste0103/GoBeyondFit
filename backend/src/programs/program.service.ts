@@ -430,7 +430,7 @@ export class ProgramService {
   /**
    * Assign program to student
    */
-  async assignToStudent(programId: string, studentId: string, coachId: string) {
+  async assignToStudent(programId: string, studentId: string, coachId: string, groupId?: string) {
     const program = await this.prisma.program.findUnique({ where: { id: programId } });
 
     if (!program) {
@@ -439,6 +439,34 @@ export class ProgramService {
 
     if (program.coachId !== coachId) {
       throw new ForbiddenException('Only the coach can assign programs');
+    }
+
+    // If groupId is provided, verify student is a member of that group
+    if (groupId) {
+      const group = await this.prisma.group.findUnique({
+        where: { id: groupId },
+      });
+
+      if (!group) {
+        throw new NotFoundException('Group not found');
+      }
+
+      // Verify coach owns the group
+      if (group.ownerId !== coachId) {
+        throw new ForbiddenException('You can only assign programs to groups you own');
+      }
+
+      // Verify student is a member of the group
+      const isMember = await this.prisma.groupMember.findFirst({
+        where: {
+          groupId,
+          userId: studentId,
+        },
+      });
+
+      if (!isMember) {
+        throw new ForbiddenException('Student must be a member of the group to receive program assignment');
+      }
     }
 
     // Check if already assigned
@@ -515,6 +543,36 @@ export class ProgramService {
     }
 
     return this.auditService.getAuditLog(programId);
+  }
+
+  /**
+   * Get assignments received by a student (for notifications)
+   */
+  async getAssignmentsForStudent(studentId: string) {
+    const assignments = await this.prisma.programAssignment.findMany({
+      where: { studentId },
+      include: {
+        program: {
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            coachId: true,
+          },
+        },
+        assigner: {
+          select: {
+            id: true,
+            pseudo: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+      },
+      orderBy: { assignedAt: 'desc' },
+    });
+
+    return assignments;
   }
 }
 

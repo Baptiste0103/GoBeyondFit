@@ -122,18 +122,18 @@ services:
       start_period: 60s
 
   # Adminer for database management (COMMENTED OUT - disable for production to save resources)
-  # adminer:
-  #   image: adminer:latest
-  #   container_name: gobeyondfit-adminer
-  #   depends_on:
-  #     - postgres
-  #   ports:
-  #     - "8080:8080"
-  #   networks:
-  #     - gobeyondfit-network
-  #   # Resource limits
-  #   mem_limit: 128m
-  #   cpus: '0.25'
+  adminer:
+    image: adminer:latest
+    container_name: gobeyondfit-adminer
+    depends_on:
+      - postgres
+    ports:
+      - "8080:8080"
+    networks:
+      - gobeyondfit-network
+    # Resource limits
+    mem_limit: 128m
+    cpus: '0.25'
 
 volumes:
   postgres_data:

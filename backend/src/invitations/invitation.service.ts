@@ -34,9 +34,24 @@ export class InvitationService {
       );
     }
 
+    // Resolve toUserId from either toUserId or toPseudo
+    let toUserId = dto.toUserId;
+    if (!toUserId && dto.toPseudo) {
+      const user = await this.prisma.user.findFirst({
+        where: { pseudo: { equals: dto.toPseudo, mode: 'insensitive' } },
+        select: { id: true },
+      });
+      if (!user) {
+        throw new NotFoundException(`User with pseudo ${dto.toPseudo} not found`);
+      }
+      toUserId = user.id;
+    } else if (!toUserId) {
+      throw new BadRequestException('Either toUserId or toPseudo must be provided');
+    }
+
     // Check if user exists
     const toUser = await this.prisma.user.findUnique({
-      where: { id: dto.toUserId },
+      where: { id: toUserId },
     });
 
     if (!toUser) {
@@ -47,7 +62,7 @@ export class InvitationService {
     const existingInvitation = await this.prisma.invitation.findFirst({
       where: {
         groupId: dto.groupId,
-        toUserId: dto.toUserId,
+        toUserId: toUserId,
         status: 'pending',
       },
     });
@@ -68,7 +83,7 @@ export class InvitationService {
       data: {
         groupId: dto.groupId,
         fromCoachId,
-        toUserId: dto.toUserId,
+        toUserId: toUserId,
         status: 'pending',
       },
       include: {
@@ -109,9 +124,8 @@ export class InvitationService {
    */
   async getInvitationsForUser(userId: string, status?: string) {
     const where: any = { toUserId: userId };
-    if (status) {
-      where.status = status;
-    }
+    // Default to pending invitations only
+    where.status = status || 'pending';
 
     const invitations = await this.prisma.invitation.findMany({
       where,
@@ -192,14 +206,23 @@ export class InvitationService {
       },
     });
 
-    // Add user to group as member
-    await this.prisma.groupMember.create({
-      data: {
+    // Add user to group as member (or update if already exists)
+    const existingMember = await this.prisma.groupMember.findFirst({
+      where: {
         groupId: invitation.groupId,
         userId: invitation.toUserId,
-        roleInGroup: 'member',
       },
     });
+
+    if (!existingMember) {
+      await this.prisma.groupMember.create({
+        data: {
+          groupId: invitation.groupId,
+          userId: invitation.toUserId,
+          roleInGroup: 'member',
+        },
+      });
+    }
 
     return {
       id: updatedInvitation.id,
@@ -249,9 +272,9 @@ export class InvitationService {
   }
 
   /**
-   * Delete an invitation (coach only)
+   * Delete an invitation (coach or student who received it)
    */
-  async deleteInvitation(invitationId: string, fromCoachId: string) {
+  async deleteInvitation(invitationId: string, userId: string) {
     const invitation = await this.prisma.invitation.findUnique({
       where: { id: invitationId },
     });
@@ -260,9 +283,13 @@ export class InvitationService {
       throw new NotFoundException('Invitation not found');
     }
 
-    if (invitation.fromCoachId !== fromCoachId) {
+    // Allow coach who sent it or student who received it to delete
+    const isCoachWhoSent = invitation.fromCoachId === userId;
+    const isStudentWhoReceived = invitation.toUserId === userId;
+
+    if (!isCoachWhoSent && !isStudentWhoReceived) {
       throw new BadRequestException(
-        'You can only delete your own invitations',
+        'You do not have permission to delete this invitation',
       );
     }
 

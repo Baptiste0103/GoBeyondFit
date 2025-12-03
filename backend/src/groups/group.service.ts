@@ -303,4 +303,72 @@ export class GroupService {
       where: { id: member.id },
     })
   }
+
+  async getGroupMembers(groupId: string, userId: string) {
+    const group = await this.prisma.group.findUnique({ where: { id: groupId } })
+
+    if (!group) {
+      throw new NotFoundException('Group not found')
+    }
+
+    // Check permission: owner or member can view members
+    const isMember = await this.prisma.groupMember.findFirst({
+      where: {
+        groupId,
+        userId,
+      },
+    })
+
+    if (group.ownerId !== userId && !isMember) {
+      throw new ForbiddenException('You do not have permission to view this group members')
+    }
+
+    const members = await this.prisma.groupMember.findMany({
+      where: { groupId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            pseudo: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+      },
+    })
+
+    return members
+  }
+
+  async leaveGroup(groupId: string, userId: string) {
+    const group = await this.prisma.group.findUnique({ where: { id: groupId } })
+
+    if (!group) {
+      throw new NotFoundException('Group not found')
+    }
+
+    // Cannot leave if owner
+    if (group.ownerId === userId) {
+      throw new ForbiddenException('Owner cannot leave their own group')
+    }
+
+    // Find and remove membership
+    const member = await this.prisma.groupMember.findFirst({
+      where: {
+        groupId,
+        userId,
+      },
+    })
+
+    if (!member) {
+      throw new NotFoundException('You are not a member of this group')
+    }
+
+    await this.prisma.groupMember.delete({
+      where: { id: member.id },
+    })
+
+    return { success: true, message: 'Left group successfully' }
+  }
 }

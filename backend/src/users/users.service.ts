@@ -26,6 +26,44 @@ export class UsersService {
     return user;
   }
 
+  async findByPseudoOrNull(pseudo: string) {
+    const user = await this.prisma.user.findFirst({
+      where: { pseudo: { equals: pseudo, mode: 'insensitive' } },
+      select: {
+        id: true,
+        email: true,
+        pseudo: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        profileUrl: true,
+      },
+    });
+
+    return user;
+  }
+
+  async findByPseudo(pseudo: string) {
+    const user = await this.prisma.user.findFirst({
+      where: { pseudo: { equals: pseudo, mode: 'insensitive' } },
+      select: {
+        id: true,
+        email: true,
+        pseudo: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        profileUrl: true,
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`User with pseudo ${pseudo} not found`);
+    }
+
+    return user;
+  }
+
   async findById(id: string) {
     const user = await this.prisma.user.findUnique({
       where: { id },

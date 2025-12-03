@@ -12,8 +12,12 @@ export class SendInvitationDto {
   groupId: string;
 
   @IsUUID()
-  @IsNotEmpty()
-  toUserId: string;
+  @IsOptional()
+  toUserId?: string;
+
+  @IsString()
+  @IsOptional()
+  toPseudo?: string;
 
   @IsString()
   @IsOptional()

@@ -106,8 +106,6 @@ export class InvitationController {
   }
 
   @Delete(':id')
-  @UseGuards(RolesGuard)
-  @Roles(UserRole.COACH, UserRole.ADMIN)
   @ApiOperation({ summary: 'Delete invitation' })
   @ApiResponse({
     status: HttpStatus.OK,

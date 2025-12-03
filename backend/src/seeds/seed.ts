@@ -92,12 +92,17 @@ async function seedUsers() {
       console.log('⏭️  Admin user already exists, skipping...');
     }
 
-    // Check if coach exists
+    // Check if coach exists by pseudo first
+    const coachByPseudoExists = await prisma.user.findUnique({
+      where: { pseudo: 'coach' },
+    }).catch(() => null);
+
+    // Check if coach exists by email
     const coachExists = await prisma.user.findUnique({
       where: { email: 'coach@gobeyondfit.com' },
-    });
+    }).catch(() => null);
 
-    if (!coachExists) {
+    if (!coachExists && !coachByPseudoExists) {
       const hashedPassword = await bcrypt.hash('coach123', 10);
       
       await prisma.user.create({

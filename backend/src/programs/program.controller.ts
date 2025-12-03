@@ -158,9 +158,10 @@ export class ProgramController {
   async assignToStudent(
     @Param('programId') programId: string,
     @Param('studentId') studentId: string,
-    @Request() req: any,
+    @Body() body?: { groupId?: string },
+    @Request() req?: any,
   ) {
-    return this.programService.assignToStudent(programId, studentId, req.user.id);
+    return this.programService.assignToStudent(programId, studentId, req.user.id, body?.groupId);
   }
 
   @Delete(':assignmentId/assignment')
@@ -173,5 +174,16 @@ export class ProgramController {
   })
   async removeAssignment(@Param('assignmentId') assignmentId: string, @Request() req: any) {
     return this.programService.removeAssignment(assignmentId, req.user.id);
+  }
+
+  @Get('assignments/me')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Get assignments received by current student' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'List of program assignments',
+  })
+  async getMyAssignments(@Request() req: any) {
+    return this.programService.getAssignmentsForStudent(req.user.id);
   }
 }

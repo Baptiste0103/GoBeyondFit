@@ -172,4 +172,32 @@ export class GroupController {
   ) {
     return this.groupService.removeMember(groupId, req.user.id, memberUserId)
   }
+
+  @Get(':id/members')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Get members of a group' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'List of group members',
+  })
+  async getGroupMembers(
+    @Param('id') groupId: string,
+    @Request() req: any,
+  ) {
+    return this.groupService.getGroupMembers(groupId, req.user.id)
+  }
+
+  @Post(':id/leave')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Leave a group as member' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Left group successfully',
+  })
+  async leaveGroup(
+    @Param('id') groupId: string,
+    @Request() req: any,
+  ) {
+    return this.groupService.leaveGroup(groupId, req.user.id)
+  }
 }
