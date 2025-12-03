@@ -1,0 +1,28 @@
+Question on GOBeyondFitApp
+
+- Quelle structure de code, explique et pk ?
+ 
+- A quelle moment sont utilisé les JWT token comment sont ils implémenter ? Quelles alternatives 
+
+- Quelles outils pour faire un meilleur front-end, quelles libraries utilisé etc...
+
+- - utilisé de Swagger API comment cela fonctionne, Possibilité d'implémenter des fonctionnalités sans API Endpoint pour le backend ? 
+
+- Quelles middleware, comment le backend et le frontend coommuniquent t-ils
+
+- utilité du gobeyonfit-network ? 
+
+- fonctionnement token JWT 
+
+- a quoi sert "npm run build" que l'ia fait 
+
+
+
+Fonctionnalité à rajouter : 
+
+Peu pas accéder à l'endpoint /programs ou autre si pas passer par la page login avant, une fois connecter générer des cookies valide 1h pour ne pas devoir a se re-identifier tout le temps.
+Voir l'implementation acutuel 
+
+- ajoute de la BDD d'exercice (les 5 premières colonnes) 
+
+- 

@@ -1,0 +1,371 @@
+1. Project Overview
+Build a comprehensive web platform for fitness coaching allowing coaches to create programs and students to track workouts.
+
+Role: Full Stack Development
+
+Language: TypeScript (Strict)
+
+Locales: EN (Codebase/Logs), FR (UI/Business Logic)
+
+2. Technical Stack & Architecture
+Backend (NestJS)
+Framework: NestJS (Modular architecture).
+
+Database ORM: Prisma (PostgreSQL).
+
+Auth: Supabase Auth (JWT validation strategy via Passport).
+
+Storage: Supabase Storage (S3 compatible).
+
+API Documentation: Swagger/OpenAPI (Auto-generated).
+
+Validation: class-validator & class-transformer.
+
+Frontend (Next.js)
+Framework: Next.js 14+ (App Router).
+
+Styling: TailwindCSS + shadcn/ui + Framer Motion.
+
+State Management: TanStack Query (React Query) v5.
+
+Forms: React Hook Form + Zod.
+
+Icons: Lucide React.
+
+Infrastructure (Supabase)
+Database: Postgres.
+
+Auth: Built-in Auth (Email/Password).
+
+3. Database Schema (Prisma)
+Context: The AI should use this schema to generate the DB migrations and TypeScript types immediately.
+
+Extrait de code
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  admin
+  coach
+  student
+}
+
+enum ExerciseType {
+  standard
+  EMOM
+  AMRAP
+  custom
+}
+
+enum Scope {
+  global
+  coach
+}
+
+enum InvitationStatus {
+  pending
+  accepted
+  rejected
+}
+
+model User {
+  id          String   @id @default(uuid())
+  email       String   @unique
+  pseudo      String   @unique
+  firstName   String?
+  lastName    String?
+  role        Role
+  profileUrl  String?
+  coachId     String?  // Link to a coach if user is a student
+  coach       User?    @relation("CoachStudents", fields: [coachId], references: [id])
+  students    User[]   @relation("CoachStudents")
+  
+  // Relations
+  ownedGroups      Group[]
+  groupMemberships GroupMember[]
+  sentInvitations  Invitation[] @relation("SentInvitations")
+  receivedInvitations Invitation[] @relation("ReceivedInvitations")
+  createdExercises Exercise[]
+  createdPrograms  Program[]
+  assignedPrograms ProgramAssignment[] @relation("StudentAssignments")
+  assignedBy       ProgramAssignment[] @relation("CoachAssignments")
+  sessionProgress  SessionProgress[]
+  badges           UserBadge[]
+  notifications    Notification[]
+  auditLogs        ProgramAudit[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+model Group {
+  id          String   @id @default(uuid())
+  ownerId     String
+  owner       User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  members     GroupMember[]
+  invitations Invitation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("groups")
+}
+
+model GroupMember {
+  id        String   @id @default(uuid())
+  groupId   String
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roleInGroup String @default("member")
+  joinedAt  DateTime @default(now())
+
+  @@map("group_members")
+}
+
+model Invitation {
+  id          String   @id @default(uuid())
+  groupId     String
+  group       Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  fromCoachId String
+  fromCoach   User     @relation("SentInvitations", fields: [fromCoachId], references: [id])
+  toUserId    String
+  toUser      User     @relation("ReceivedInvitations", fields: [toUserId], references: [id])
+  status      InvitationStatus
+  createdAt   DateTime @default(now())
+  respondedAt DateTime?
+
+  @@map("invitations")
+}
+
+model Exercise {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  type        ExerciseType
+  meta        Json?    // Stores specific config like default rounds
+  scope       Scope
+  ownerId     String?
+  owner       User?    @relation(fields: [ownerId], references: [id])
+  
+  sessionExercises SessionExercise[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("exercises")
+}
+
+model Program {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  coachId     String
+  coach       User     @relation(fields: [coachId], references: [id], onDelete: Cascade)
+  isDraft     Boolean  @default(true)
+  
+  blocks      ProgramBlock[]
+  assignments ProgramAssignment[]
+  auditLogs   ProgramAudit[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("programs")
+}
+
+model ProgramBlock {
+  id        String   @id @default(uuid())
+  programId String
+  program   Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
+  title     String?
+  position  Int
+  notes     String?
+  weeks     Week[]
+
+  @@map("program_blocks")
+}
+
+model Week {
+  id         String   @id @default(uuid())
+  blockId    String
+  block      ProgramBlock @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  weekNumber Int
+  position   Int
+  sessions   Session[]
+
+  @@map("weeks")
+}
+
+model Session {
+  id       String   @id @default(uuid())
+  weekId   String
+  week     Week     @relation(fields: [weekId], references: [id], onDelete: Cascade)
+  title    String?
+  notes    String?
+  date     DateTime? // Optional planned date
+  position Int
+  
+  exercises SessionExercise[]
+  progress  SessionProgress[]
+
+  @@map("sessions")
+}
+
+model SessionExercise {
+  id         String   @id @default(uuid())
+  sessionId  String
+  session    Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  exerciseId String
+  exercise   Exercise @relation(fields: [exerciseId], references: [id])
+  config     Json?    // Planned sets/reps/weights
+  position   Int
+  
+  progressInstances SessionProgress[]
+
+  @@map("session_exercises")
+}
+
+model SessionProgress {
+  id                 String   @id @default(uuid())
+  sessionId          String
+  session            Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  studentId          String
+  student            User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  exerciseInstanceId String?
+  exerciseInstance   SessionExercise? @relation(fields: [exerciseInstanceId], references: [id])
+  
+  progress  Json?    // Actual sets/reps/weights + done status
+  notes     String?
+  videos    String[] // Array of URLs
+  savedAt   DateTime @default(now())
+
+  @@map("session_progress")
+}
+
+model ProgramAssignment {
+  id         String   @id @default(uuid())
+  programId  String
+  program    Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
+  studentId  String
+  student    User     @relation("StudentAssignments", fields: [studentId], references: [id], onDelete: Cascade)
+  assignedBy String?
+  assigner   User?    @relation("CoachAssignments", fields: [assignedBy], references: [id])
+  assignedAt DateTime @default(now())
+
+  @@map("program_assignments")
+}
+
+model ProgramAudit {
+  id         String   @id @default(uuid())
+  programId  String
+  program    Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
+  changedBy  String
+  user       User     @relation(fields: [changedBy], references: [id])
+  changeType String   // create, update, delete
+  diff       Json?
+  createdAt  DateTime @default(now())
+
+  @@map("program_audit")
+}
+
+model Badge {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  title       Json     // {"en": "...", "fr": "..."}
+  description Json
+  criteria    Json
+  userBadges  UserBadge[]
+
+  @@map("badges")
+}
+
+model UserBadge {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  badgeId   String
+  badge     Badge    @relation(fields: [badgeId], references: [id])
+  awardedAt DateTime @default(now())
+
+  @@map("user_badges")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  type      String
+  payload   Json?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@map("notifications")
+}
+4. Implementation Phases & Features
+Phase 1: Foundation (Backend & Auth)
+Goal: User management and Auth flow working.
+
+Setup: NestJS + Prisma setup. Supabase Project config.
+
+Auth Module: Implement JwtStrategy checking Supabase token.
+
+User Module: Sync Supabase auth.users to local users table via Webhook or Middleware check.
+
+Endpoint: GET /auth/me returning User + Role.
+
+Phase 2: Core Domain (Coach)
+Goal: Coaches can manage groups and exercises.
+
+Exercises Module: CRUD endpoints. Logic to handle "Global" vs "Coach" scope.
+
+Groups Module: Create group, invite student (email trigger), manage members.
+
+Invitations: Accept/Reject flow.
+
+Phase 3: Program Builder (Complex)
+Goal: The Program Editor.
+
+Programs Module: Nested creation (Program -> Blocks -> Weeks -> Sessions -> Exercises).
+
+Assignments: Assign program to Student(s).
+
+Audit: Log changes to ProgramAudit.
+
+Phase 4: Student Experience
+Goal: The "Workout Mode".
+
+Calendar/Sessions: API to fetch "My Sessions" for a date range.
+
+Workout Runner: UI to input reps/sets (Autosave implementation).
+
+File Upload: Integration with Supabase Storage for video uploads.
+
+Phase 5: Gamification & Stats
+Badges: Event-driven badge award system (e.g., on "Session Completed" event).
+
+Stats: Aggregation queries for max weight/volume over time.
+
+5. Development Guidelines (AI Instructions)
+Strict Typing: No any. Define DTOs for every input. Return types for every Controller method.
+
+Repository Pattern: Do not use prisma directly in Controllers. Use Services.
+
+Error Handling: Use NestJS HttpException filters.
+
+UI Components: Use shadcn/ui components for all standard elements.
+
+State: Use useQuery for fetching. useMutation for updates.
+
+I18n: Prepare structure for EN/FR. Hardcode FR for now if easier, but stick to keys where possible.

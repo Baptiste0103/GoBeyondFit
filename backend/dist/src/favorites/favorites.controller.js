@@ -1,0 +1,103 @@
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.UserFavoritesController = exports.FavoritesController = void 0;
+const common_1 = require("@nestjs/common");
+const jwt_auth_guard_1 = require("../common/guards/jwt-auth.guard");
+const favorites_service_1 = require("./favorites.service");
+let FavoritesController = class FavoritesController {
+    favoritesService;
+    constructor(favoritesService) {
+        this.favoritesService = favoritesService;
+    }
+    async addFavorite(exerciseId, req) {
+        if (!exerciseId) {
+            throw new common_1.BadRequestException('Exercise ID is required');
+        }
+        return this.favoritesService.addFavorite(req.user.id, exerciseId);
+    }
+    async removeFavorite(exerciseId, req) {
+        if (!exerciseId) {
+            throw new common_1.BadRequestException('Exercise ID is required');
+        }
+        return this.favoritesService.removeFavorite(req.user.id, exerciseId);
+    }
+    async isFavorite(exerciseId, req) {
+        if (!exerciseId) {
+            throw new common_1.BadRequestException('Exercise ID is required');
+        }
+        const isFavorited = await this.favoritesService.isFavorite(req.user.id, exerciseId);
+        return { exerciseId, isFavorited };
+    }
+};
+exports.FavoritesController = FavoritesController;
+__decorate([
+    (0, common_1.Post)(':id/favorite'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Request)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], FavoritesController.prototype, "addFavorite", null);
+__decorate([
+    (0, common_1.Delete)(':id/favorite'),
+    (0, common_1.HttpCode)(204),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Request)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], FavoritesController.prototype, "removeFavorite", null);
+__decorate([
+    (0, common_1.Get)(':id/is-favorite'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Request)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], FavoritesController.prototype, "isFavorite", null);
+exports.FavoritesController = FavoritesController = __decorate([
+    (0, common_1.Controller)('exercises'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    __metadata("design:paramtypes", [favorites_service_1.FavoritesService])
+], FavoritesController);
+let UserFavoritesController = class UserFavoritesController {
+    favoritesService;
+    constructor(favoritesService) {
+        this.favoritesService = favoritesService;
+    }
+    async getUserFavorites(page, limit, req) {
+        if (limit > 100)
+            limit = 100;
+        if (page < 1)
+            page = 1;
+        return this.favoritesService.getUserFavorites(req.user.id, page, limit);
+    }
+};
+exports.UserFavoritesController = UserFavoritesController;
+__decorate([
+    (0, common_1.Get)('exercises'),
+    __param(0, (0, common_1.Query)('page', new common_1.DefaultValuePipe(1), common_1.ParseIntPipe)),
+    __param(1, (0, common_1.Query)('limit', new common_1.DefaultValuePipe(20), common_1.ParseIntPipe)),
+    __param(2, (0, common_1.Request)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number, Number, Object]),
+    __metadata("design:returntype", Promise)
+], UserFavoritesController.prototype, "getUserFavorites", null);
+exports.UserFavoritesController = UserFavoritesController = __decorate([
+    (0, common_1.Controller)('users/favorites'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    __metadata("design:paramtypes", [favorites_service_1.FavoritesService])
+], UserFavoritesController);
+//# sourceMappingURL=favorites.controller.js.map

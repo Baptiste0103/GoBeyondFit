@@ -1,0 +1,77 @@
+# Build and dependency files
+.dockerignore
+node_modules
+npm-debug.log
+yarn-error.log
+pnpm-debug.log
+build
+dist
+.next
+coverage
+*.tsbuildinfo
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Version control
+.git
+.gitignore
+.gitattributes
+
+# IDE and editors
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Documentation
+*.md
+Documentation
+
+# Test files
+test
+__tests__
+*.test.ts
+*.spec.ts
+jest.config.js
+.eslintcache
+
+# CI/CD
+.github
+.gitlab-ci.yml
+.circleci
+
+# Scripts and config (not needed in container)
+*.sh
+Dockerfile
+docker-compose.yml
+quick_start.ps1
+quick_start.sh
+DOCKER_COMMANDS.sh
+
+# Data and temp files
+*.xlsx
+*.csv
+*.sql
+check_users.sql
+create_users.sh
+temp_user.sql
+test_programs.sh
+*.txt
+~$*
+
+# Cache
+.cache
+.npm
+
+# TypeScript
+tsconfig.json (will be copied explicitly)
+tsconfig.build.json (will be copied explicitly)
+

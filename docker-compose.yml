@@ -1,0 +1,144 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: gobeyondfit-postgres
+    environment:
+      POSTGRES_USER: ${DB_USER:-gobeyondfit}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-gobeyondfit123}
+      POSTGRES_DB: ${DB_NAME:-gobeyondfit_db}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/prisma/init-db.sql:/docker-entrypoint-initdb.d/01-init-db.sql
+    # Resource limits
+    mem_limit: 512m
+    memswap_limit: 512m
+    cpus: '0.5'
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-gobeyondfit}"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - gobeyondfit-network
+
+  # Backend NestJS API
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: gobeyondfit-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Database
+      DATABASE_URL: postgresql://${DB_USER:-gobeyondfit}:${DB_PASSWORD:-gobeyondfit123}@postgres:5432/${DB_NAME:-gobeyondfit_db}?schema=public
+      
+      # Server
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3000
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3001}
+      
+      # JWT
+      JWT_SECRET: ${JWT_SECRET:-your_jwt_secret_key_change_in_production}
+      
+      # Email (SMTP)
+      SMTP_HOST: ${SMTP_HOST:-smtp.ethereal.email}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+      SMTP_FROM: ${SMTP_FROM:-noreply@gobeyondfit.com}
+      
+      # Frontend
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3001}
+      # Optimize Node.js memory
+      NODE_OPTIONS: --max-old-space-size=256
+    
+    ports:
+      - "${BACKEND_PORT:-3000}:3000"
+    
+    volumes:
+      - ./backend/src:/app/src
+      - /app/node_modules
+    
+    # Resource limits
+    mem_limit: 512m
+    memswap_limit: 512m
+    cpus: '1'
+    
+    networks:
+      - gobeyondfit-network
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/docs"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Frontend Next.js Application
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: gobeyondfit-frontend
+    depends_on:
+      - backend
+    environment:
+      # App
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3001
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3000/api}
+      # Optimize Node.js memory
+      NODE_OPTIONS: --max-old-space-size=256
+    
+    ports:
+      - "${FRONTEND_PORT:-3001}:3001"
+    
+    volumes:
+      - ./frontend/app:/app/app
+      - ./frontend/lib:/app/lib
+      - ./frontend/components:/app/components
+      - ./frontend/public:/app/public
+      - /app/.next
+      - /app/node_modules
+    
+    # Resource limits
+    mem_limit: 512m
+    memswap_limit: 512m
+    cpus: '1'
+    
+    networks:
+      - gobeyondfit-network
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Adminer for database management (COMMENTED OUT - disable for production to save resources)
+  # adminer:
+  #   image: adminer:latest
+  #   container_name: gobeyondfit-adminer
+  #   depends_on:
+  #     - postgres
+  #   ports:
+  #     - "8080:8080"
+  #   networks:
+  #     - gobeyondfit-network
+  #   # Resource limits
+  #   mem_limit: 128m
+  #   cpus: '0.25'
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  gobeyondfit-network:
+    driver: bridge

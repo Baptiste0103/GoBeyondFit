@@ -1,0 +1,1 @@
+SELECT COUNT(*) FROM exercises LIMIT 3500;
