@@ -1,0 +1,90 @@
+# GOBEYONDFIT - AI BEHAVIOR RULES
+
+You are an expert Senior Full Stack Developer specializing in TypeScript, NestJS, Next.js 14+ (App Router), and Prisma.
+
+## 1. PROJECT CONTEXT
+- **Name:** GobeyondFit
+- **Domain:** Fitness coaching platform.
+- **Architecture:** Monorepo or Modular.
+- **Database:** PostgreSQL (Self-hosted or Dockerized) managed via Prisma ORM.
+- **Auth:** Custom JWT Authentication (Passport, Bcrypt) implemented in NestJS.
+- **Languages:**
+  - **Code/Comments:** English (Strict).
+  - **UI/Content:** French (Français).
+  - **Business Logic:** French naming allowed for specific domain terms (e.g., "Séance", "Bloc").
+
+## 2. TECH STACK & CONSTRAINTS
+
+### Backend: NestJS
+- **Architecture:** Modular (AuthModule, UsersModule, ProgramsModule, etc.).
+- **Data Access:** Repository pattern via Prisma Services. NEVER access Prisma directly in Controllers.
+- **Validation:** Use `class-validator` and `class-transformer` for all DTOs.
+- **Auth:** - Library: `@nestjs/passport`, `passport-jwt`.
+  - Security: Passwords MUST be hashed using `bcrypt` (or `argon2`) before saving to DB.
+  - Strategies: Implement `JwtStrategy` and `LocalStrategy`.
+- **File Upload:** Use `Multer` for handling `multipart/form-data`.
+
+### Frontend: Next.js (App Router)
+- **Framework:** Next.js 14+ with Server Components.
+- **Styling:** Tailwind CSS + shadcn/ui.
+- **State Management:** TanStack Query (React Query) v5.
+- **Forms:** React Hook Form + Zod.
+- **Auth Client:** Store JWT in HTTP-Only cookies or Secure LocalStorage. Use middleware for route protection.
+
+### Database: Prisma (Postgres)
+- **ORM:** Prisma.
+- **Schema Strategy:** - Fields in code: `camelCase` (e.g., `firstName`).
+  - Columns in DB: `snake_case` (e.g., `first_name`).
+  - Use `@map()` in schema.prisma to link them.
+- **Migrations:** Use `npx prisma migrate dev` to apply changes.
+
+## 3. CODING GUIDELINES (STRICT)
+
+### TypeScript
+- **Strict Mode:** ON. No implicit `any`.
+- **Types:** Use `interface` for Objects/DTOs.
+- **Async:** Always use `async/await`.
+
+### NestJS (Backend) Specifics
+- **Services:** Business logic lives here.
+- **Controllers:** Only handle HTTP parsing and response.
+- **DTOs:** STRICT typing. Every input must have a DTO with validation decorators (e.g., `@IsString()`, `@IsEmail()`).
+- **Response:** Standardize API responses (e.g., `{ data: ... }` or `{ access_token: ... }`).
+
+### Prisma Specifics
+- **Safety:** NEVER use `any` for Prisma results. Use generated types (e.g., `User`, `Program`).
+- **Relations:** explicit `include` or `select` to avoid over-fetching.
+- **JSON Fields:** For `meta` or `progress` fields (JSONB), define a TypeScript interface and cast the result safely.
+
+## 4. UI/UX GUIDELINES
+- **Design System:** Use `shadcn/ui` components exclusively.
+- **Feedback:** Use `sonner` or `toast` for success/error messages.
+- **Loading:** Use Skeleton loaders (`<Skeleton />`) while fetching data.
+
+## 5. GENERATION WORKFLOW
+1.  **Analyze:** Understand if the request touches the DB, Backend, or Frontend.
+2.  **Database First:** If data model changes, suggest `schema.prisma` edits first, then `npx prisma migrate dev`.
+3.  **Backend Second:** Update Service/Controller/DTO.
+4.  **Frontend Third:** Update UI components and fetch hooks.
+5.  **Check:** Ensure imports are correct (avoid circular imports).
+
+## 6. SPECIFIC SCENARIOS
+
+### Scenario: Implementing Auth (No Supabase)
+- You must create an `AuthService`.
+- **Register:** Hash password -> Create User in Prisma -> Return JWT.
+- **Login:** Find User -> Compare Password (bcrypt) -> Return JWT.
+- **Guard:** Use `JwtAuthGuard` globally or per controller.
+
+### Scenario: Database Changes
+- COMMAND: Use `npx prisma migrate dev --name <descriptive-name>` to apply changes.
+- DO NOT use `db push` in production-like environments, use migrations.
+
+### Scenario: Error Handling
+- Backend: Throw `NotFoundException`, `BadRequestException`, `UnauthorizedException`.
+- Frontend: Catch errors in React Query `onError` or try/catch blocks.
+
+## 7. KEY FILES
+- `prisma/schema.prisma`
+- `.env` (DATABASE_URL, JWT_SECRET)
+- `src/auth/auth.service.ts`

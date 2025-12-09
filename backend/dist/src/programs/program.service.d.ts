@@ -349,7 +349,7 @@ export declare class ProgramService {
         title: string;
         isDraft: boolean;
     })[]>;
-    assignToStudent(programId: string, studentId: string, coachId: string): Promise<{
+    assignToStudent(programId: string, studentId: string, coachId: string, groupId?: string): Promise<{
         id: string;
         assignedBy: string | null;
         programId: string;
@@ -376,5 +376,90 @@ export declare class ProgramService {
         diff: import("@prisma/client/runtime/library").JsonValue | null;
         programId: string;
         changedBy: string;
+    })[]>;
+    getAssignmentsForStudent(studentId: string): Promise<({
+        program: {
+            id: string;
+            coachId: string;
+            description: string | null;
+            title: string;
+        };
+        assigner: {
+            pseudo: string;
+            firstName: string | null;
+            lastName: string | null;
+            id: string;
+        } | null;
+    } & {
+        id: string;
+        assignedBy: string | null;
+        programId: string;
+        studentId: string;
+        assignedAt: Date;
+    })[]>;
+    getMyAssignmentsWithDetails(studentId: string): Promise<({
+        program: {
+            coach: {
+                pseudo: string;
+                firstName: string | null;
+                lastName: string | null;
+                id: string;
+            };
+            blocks: ({
+                weeks: ({
+                    sessions: ({
+                        exercises: ({
+                            exercise: {
+                                type: import(".prisma/client").$Enums.ExerciseType;
+                                name: string;
+                                id: string;
+                                description: string | null;
+                            };
+                        } & {
+                            id: string;
+                            exerciseId: string;
+                            position: number;
+                            config: import("@prisma/client/runtime/library").JsonValue | null;
+                            sessionId: string;
+                        })[];
+                    } & {
+                        id: string;
+                        data: import("@prisma/client/runtime/library").JsonValue | null;
+                        title: string | null;
+                        position: number;
+                        notes: string | null;
+                        date: Date | null;
+                        weekId: string;
+                    })[];
+                } & {
+                    id: string;
+                    position: number;
+                    weekNumber: number;
+                    blockId: string;
+                })[];
+            } & {
+                id: string;
+                title: string | null;
+                position: number;
+                notes: string | null;
+                programId: string;
+            })[];
+        } & {
+            id: string;
+            coachId: string;
+            createdAt: Date;
+            updatedAt: Date;
+            data: import("@prisma/client/runtime/library").JsonValue | null;
+            description: string | null;
+            ownerId: string | null;
+            title: string;
+            isDraft: boolean;
+        };
+    } & {
+        id: string;
+        assignedBy: string | null;
+        programId: string;
+        studentId: string;
+        assignedAt: Date;
     })[]>;
 }

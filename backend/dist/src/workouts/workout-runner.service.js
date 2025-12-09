@@ -12,160 +12,543 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.WorkoutRunnerService = void 0;
 const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../prisma/prisma.service");
+const workout_config_dto_1 = require("./dto/workout-config.dto");
 let WorkoutRunnerService = class WorkoutRunnerService {
     prisma;
     constructor(prisma) {
         this.prisma = prisma;
     }
+    async getOrCreateSessionProgress(sessionId, studentId, session) {
+        let sessionProgress = await this.prisma.sessionProgress.findFirst({
+            where: {
+                sessionId,
+                studentId,
+            },
+        });
+        if (!sessionProgress) {
+            const exercisesData = session.exercises?.map((ex, index) => {
+                let data = {};
+                const exerciseType = ex.exercise?.type || 'standard';
+                switch (exerciseType) {
+                    case 'EMOM':
+                        data = { repsPerMinute: [], rpe: null, notes: '' };
+                        break;
+                    case 'AMRAP':
+                        data = { totalReps: 0, rpe: null, notes: '' };
+                        break;
+                    case 'circuit':
+                        data = { roundsCompleted: 0, totalReps: 0, weightUsed: null, rpe: null, notes: '' };
+                        break;
+                    case 'standard':
+                    default:
+                        data = { setsCompleted: 0, repsCompleted: 0, weightUsed: null, rpe: null, notes: '' };
+                }
+                return {
+                    position: index,
+                    exerciseId: ex.exerciseId,
+                    exerciseName: ex.exercise?.name,
+                    exerciseType,
+                    config: ex.config,
+                    status: 'not_started',
+                    data,
+                    notes: '',
+                    videos: [],
+                };
+            }) || [];
+            sessionProgress = await this.prisma.sessionProgress.create({
+                data: {
+                    sessionId,
+                    studentId,
+                    status: 'not_started',
+                    progress: {
+                        sessionId: session.id,
+                        sessionTitle: session.title || '',
+                        sessionNotes: session.notes || '',
+                        week: session.week?.weekNumber || 0,
+                        block: session.week?.block?.title || '',
+                        program: session.week?.block?.program?.title || '',
+                        exercises: exercisesData,
+                        summary: {
+                            totalExercises: exercisesData.length,
+                            completedExercises: 0,
+                            inProgressExercises: 0,
+                        },
+                    },
+                    videos: [],
+                    notes: session.notes,
+                },
+            });
+        }
+        return sessionProgress;
+    }
     async startWorkout(userId, sessionId, config = {}) {
         const session = await this.prisma.session.findUnique({
             where: { id: sessionId },
+            include: {
+                week: {
+                    include: {
+                        block: {
+                            include: {
+                                program: true,
+                            },
+                        },
+                    },
+                },
+                exercises: {
+                    include: {
+                        exercise: true,
+                    },
+                },
+            },
         });
         if (!session) {
             throw new common_1.NotFoundException('Session not found');
         }
-        const sessionData = session.data || {};
-        const totalExercises = sessionData.exercises?.length || 0;
-        const workout = await this.prisma.workoutSession.create({
-            data: {
-                userId,
-                startedAt: new Date(),
-                startTime: new Date(),
-                exercisesCompleted: 0,
-                totalExercises,
-                restPeriodSeconds: config.restPeriodSeconds || 60,
-                formGuidanceEnabled: config.formGuidanceEnabled ?? true,
+        const program = session.week?.block?.program;
+        if (!program) {
+            throw new common_1.NotFoundException('Program not found for this session');
+        }
+        const assignment = await this.prisma.programAssignment.findFirst({
+            where: {
+                programId: program.id,
+                studentId: userId,
             },
         });
+        if (!assignment) {
+            throw new common_1.BadRequestException('Student not assigned to this program');
+        }
+        const sessionProgress = await this.getOrCreateSessionProgress(session.id, userId, session);
+        const totalExercises = session.exercises?.length || 0;
+        console.log(`🟢 [startWorkout] SessionProgress ID: ${sessionProgress.id}`);
         return {
-            workoutId: workout.id,
+            sessionProgressId: sessionProgress.id,
             sessionId,
+            programId: program.id,
             totalExercises,
-            restPeriod: workout.restPeriodSeconds,
-            formGuidance: workout.formGuidanceEnabled,
-            startedAt: workout.startedAt,
+            progress: sessionProgress.progress,
         };
     }
-    async completeExercise(userId, workoutId, exerciseIndex, data) {
-        const workout = await this.prisma.workoutSession.findUnique({
-            where: { id: workoutId },
+    async getSessionStatus(userId, sessionId) {
+        const sessionProgress = await this.prisma.sessionProgress.findFirst({
+            where: {
+                sessionId,
+                studentId: userId,
+            },
         });
-        if (!workout) {
-            throw new common_1.NotFoundException('Workout not found');
+        if (!sessionProgress) {
+            return {
+                exists: false,
+                status: 'not_started',
+                message: 'Commencer',
+            };
         }
-        if (workout.userId !== userId) {
+        const hasProgress = sessionProgress.progress &&
+            sessionProgress.progress.exercises?.some((ex) => ex.data && Object.keys(ex.data).some(k => ex.data[k] !== null && ex.data[k] !== 0 && ex.data[k] !== ''));
+        const latestWorkout = await this.prisma.workoutSession.findFirst({
+            where: {
+                userId,
+                sessionId,
+            },
+            orderBy: { startedAt: 'desc' },
+            take: 1,
+        });
+        return {
+            exists: true,
+            workoutId: latestWorkout?.id,
+            hasProgress: hasProgress || false,
+            status: hasProgress ? 'in_progress' : 'started',
+            message: hasProgress ? 'Modifier' : 'Commencer',
+            sessionProgressId: sessionProgress.id,
+        };
+    }
+    async completeExercise(userId, sessionProgressId, exerciseIndex, data) {
+        console.log(`🔵 [completeExercise] START - userId: ${userId}, sessionProgressId: ${sessionProgressId}, exerciseIndex: ${exerciseIndex}`);
+        const sessionProgress = await this.prisma.sessionProgress.findUnique({
+            where: { id: sessionProgressId },
+        });
+        if (!sessionProgress) {
+            throw new common_1.NotFoundException('SessionProgress not found');
+        }
+        if (sessionProgress.studentId !== userId) {
             throw new common_1.BadRequestException('Unauthorized');
         }
-        const exerciseLog = await this.prisma.exerciseLog.create({
-            data: {
-                sessionId: workoutId,
-                exerciseId: 'placeholder-exercise-id',
-                userId,
-                setsCompleted: data.setsCompleted,
-                weight: data.weight,
-                duration: data.duration,
-                notes: data.notes,
-                formRating: data.formRating,
-                completedAt: new Date(),
+        if (!sessionProgress.sessionId) {
+            throw new common_1.BadRequestException('SessionProgress not linked to a session');
+        }
+        const session = await this.prisma.session.findUnique({
+            where: { id: sessionProgress.sessionId },
+            include: {
+                exercises: {
+                    include: {
+                        exercise: true,
+                    },
+                },
             },
         });
-        const updatedWorkout = await this.prisma.workoutSession.update({
-            where: { id: workoutId },
+        if (!session) {
+            throw new common_1.NotFoundException('Session not found');
+        }
+        const sessionExercise = session.exercises?.[exerciseIndex];
+        if (!sessionExercise) {
+            throw new common_1.NotFoundException('Exercise not found in session');
+        }
+        const progressData = sessionProgress.progress || {};
+        if (!progressData.exercises) {
+            progressData.exercises = [];
+        }
+        if (progressData.exercises[exerciseIndex]) {
+            const exerciseData = progressData.exercises[exerciseIndex];
+            const exerciseType = sessionExercise.exercise?.type || 'standard';
+            switch (exerciseType) {
+                case 'EMOM':
+                    exerciseData.data = {
+                        repsPerMinute: data.repsPerMinute || exerciseData.data?.repsPerMinute || [],
+                        rpe: data.rpe || exerciseData.data?.rpe,
+                        notes: data.notes || exerciseData.data?.notes || '',
+                    };
+                    break;
+                case 'AMRAP':
+                    exerciseData.data = {
+                        totalReps: data.totalReps || exerciseData.data?.totalReps || 0,
+                        rpe: data.rpe || exerciseData.data?.rpe,
+                        notes: data.notes || exerciseData.data?.notes || '',
+                    };
+                    break;
+                case 'circuit':
+                    exerciseData.data = {
+                        roundsCompleted: data.roundsCompleted || exerciseData.data?.roundsCompleted || 0,
+                        totalReps: data.totalReps || exerciseData.data?.totalReps || 0,
+                        weightUsed: data.weight || exerciseData.data?.weightUsed,
+                        rpe: data.rpe || exerciseData.data?.rpe,
+                        notes: data.notes || exerciseData.data?.notes || '',
+                    };
+                    break;
+                case 'standard':
+                default:
+                    exerciseData.data = {
+                        setsCompleted: data.setsCompleted || exerciseData.data?.setsCompleted || 0,
+                        repsCompleted: data.repsCompleted || exerciseData.data?.repsCompleted || 0,
+                        weightUsed: data.weight || exerciseData.data?.weightUsed,
+                        rpe: data.rpe || exerciseData.data?.rpe,
+                        notes: data.notes || exerciseData.data?.notes || '',
+                    };
+            }
+            if (data.videos) {
+                exerciseData.videos = [...new Set([...(exerciseData.videos || []), ...data.videos])];
+            }
+            exerciseData.status = 'completed';
+        }
+        const summary = progressData.summary || {};
+        summary.completedExercises = progressData.exercises?.filter((ex) => ex.status === 'completed').length || 0;
+        summary.inProgressExercises = progressData.exercises?.filter((ex) => ex.status === 'in_progress').length || 0;
+        summary.skippedExercises = progressData.exercises?.filter((ex) => ex.status === 'skipped').length || 0;
+        progressData.summary = summary;
+        let newStatus = 'not_started';
+        if (summary.completedExercises === summary.completedExercises && summary.completedExercises > 0) {
+            newStatus = 'completed';
+        }
+        else if (summary.completedExercises > 0 || summary.inProgressExercises > 0) {
+            newStatus = 'partial';
+        }
+        const updatedSessionProgress = await this.prisma.sessionProgress.update({
+            where: { id: sessionProgress.id },
             data: {
-                exercisesCompleted: (workout.exercisesCompleted || 0) + 1,
+                progress: progressData,
+                status: newStatus,
+                videos: data.videos ? [...(sessionProgress.videos || []), ...data.videos] : sessionProgress.videos,
+                notes: data.notes || sessionProgress.notes,
+                updatedAt: new Date(),
             },
         });
-        const completed = updatedWorkout.exercisesCompleted || 0;
-        const total = updatedWorkout.totalExercises || 1;
+        console.log(`🟢 [completeExercise] SUCCESS - Exercise completed`);
         return {
-            exerciseLogId: exerciseLog.id,
-            progress: {
-                completed,
-                total,
-                percentage: Math.round((completed / total) * 100),
-            },
+            sessionProgressId: updatedSessionProgress.id,
+            sessionProgress: updatedSessionProgress.progress,
+            status: updatedSessionProgress.status,
         };
     }
-    async endWorkout(userId, workoutId) {
-        const workout = await this.prisma.workoutSession.findUnique({
+    async saveExerciseData(userId, workoutId, exerciseIndex, data) {
+        console.log(`🔵 [saveExerciseData] START - userId: ${userId}, sessionProgressId: ${workoutId}, exerciseIndex: ${exerciseIndex}`);
+        const initialSessionProgress = await this.prisma.sessionProgress.findUnique({
             where: { id: workoutId },
+            include: {
+                session: {
+                    include: {
+                        exercises: {
+                            include: {
+                                exercise: true,
+                            },
+                        },
+                    },
+                },
+            },
         });
-        if (!workout) {
-            throw new common_1.NotFoundException('Workout not found');
+        if (!initialSessionProgress) {
+            throw new common_1.NotFoundException('SessionProgress not found');
         }
-        if (workout.userId !== userId) {
+        if (initialSessionProgress.studentId !== userId) {
+            throw new common_1.BadRequestException('Unauthorized');
+        }
+        const session = initialSessionProgress.session;
+        if (!session) {
+            throw new common_1.NotFoundException('Session not found');
+        }
+        const sessionExercise = session.exercises?.[exerciseIndex];
+        if (!sessionExercise) {
+            throw new common_1.NotFoundException('Exercise not found in session');
+        }
+        let sessionProgress = await this.prisma.sessionProgress.findFirst({
+            where: {
+                sessionId: session.id,
+                studentId: userId,
+            },
+        });
+        if (!sessionProgress) {
+            sessionProgress = await this.getOrCreateSessionProgress(session.id, userId, session);
+        }
+        const progressData = sessionProgress.progress || {};
+        if (!progressData.exercises || progressData.exercises.length === 0) {
+            const exercisesData = session.exercises?.map((ex, index) => {
+                let data = {};
+                const exerciseType = ex.exercise?.type || 'standard';
+                switch (exerciseType) {
+                    case 'EMOM':
+                        data = { repsPerMinute: [], rpe: null, notes: '' };
+                        break;
+                    case 'AMRAP':
+                        data = { totalReps: 0, rpe: null, notes: '' };
+                        break;
+                    case 'circuit':
+                        data = { roundsCompleted: 0, totalReps: 0, weightUsed: null, rpe: null, notes: '' };
+                        break;
+                    case 'standard':
+                    default:
+                        data = { setsCompleted: 0, repsCompleted: 0, weightUsed: null, rpe: null, notes: '' };
+                }
+                return {
+                    position: index,
+                    exerciseId: ex.exerciseId,
+                    exerciseName: ex.exercise?.name,
+                    exerciseType,
+                    config: ex.config,
+                    status: 'not_started',
+                    data,
+                    notes: '',
+                    videos: [],
+                };
+            }) || [];
+            progressData.exercises = exercisesData;
+        }
+        if (progressData.exercises && progressData.exercises[exerciseIndex]) {
+            const exerciseData = progressData.exercises[exerciseIndex];
+            const exerciseType = sessionExercise.exercise?.type || 'standard';
+            console.log(`🔵 [saveExerciseData] Exercise type: ${exerciseType}, data:`, data);
+            switch (exerciseType) {
+                case 'EMOM':
+                    exerciseData.data = {
+                        repsPerMinute: data.repsPerMinute || exerciseData.data?.repsPerMinute || [],
+                        rpe: data.rpe || exerciseData.data?.rpe,
+                        notes: data.notes || exerciseData.data?.notes || '',
+                    };
+                    break;
+                case 'AMRAP':
+                    exerciseData.data = {
+                        totalReps: data.totalReps || exerciseData.data?.totalReps || 0,
+                        rpe: data.rpe || exerciseData.data?.rpe,
+                        notes: data.notes || exerciseData.data?.notes || '',
+                    };
+                    break;
+                case 'circuit':
+                    exerciseData.data = {
+                        roundsCompleted: data.roundsCompleted || exerciseData.data?.roundsCompleted || 0,
+                        totalReps: data.totalReps || exerciseData.data?.totalReps || 0,
+                        weightUsed: data.weight || exerciseData.data?.weightUsed,
+                        rpe: data.rpe || exerciseData.data?.rpe,
+                        notes: data.notes || exerciseData.data?.notes || '',
+                    };
+                    break;
+                case 'standard':
+                default:
+                    const repsPerSetArray = data.repsPerSet || [];
+                    const totalRepsFormed = repsPerSetArray.reduce((sum, reps) => sum + (reps || 0), 0);
+                    console.log(`🟡 [saveExerciseData] DEBUG - repsPerSetArray:`, repsPerSetArray);
+                    console.log(`🟡 [saveExerciseData] DEBUG - totalRepsFormed:`, totalRepsFormed);
+                    console.log(`🟡 [saveExerciseData] DEBUG - data.setsCompleted:`, data.setsCompleted);
+                    exerciseData.data = {
+                        setsCompleted: data.setsCompleted || exerciseData.data?.setsCompleted || 0,
+                        repsPerSet: repsPerSetArray,
+                        repsCompleted: totalRepsFormed,
+                        weightUsed: data.weight !== undefined ? data.weight : exerciseData.data?.weightUsed,
+                        rpe: data.rpe || exerciseData.data?.rpe,
+                        notes: data.notes || exerciseData.data?.notes || '',
+                    };
+                    console.log(`🟡 [saveExerciseData] Standard exercise updated:`, exerciseData.data);
+            }
+            if (data.videos && data.videos.length > 0) {
+                exerciseData.videos = [...new Set([...(exerciseData.videos || []), ...data.videos])];
+                console.log(`🟡 [saveExerciseData] Videos added:`, exerciseData.videos);
+            }
+            if (exerciseData.status !== 'completed') {
+                exerciseData.status = 'in_progress';
+            }
+            console.log(`🟡 [saveExerciseData] Exercise status updated to:`, exerciseData.status);
+        }
+        const summary = progressData.summary || {};
+        summary.completedExercises = progressData.exercises?.filter((ex) => ex.status === 'completed').length || 0;
+        summary.inProgressExercises = progressData.exercises?.filter((ex) => ex.status === 'in_progress').length || 0;
+        summary.totalExercises = progressData.exercises?.length || 0;
+        progressData.summary = summary;
+        progressData.metadata = progressData.metadata || {};
+        progressData.metadata.lastModifiedAt = new Date();
+        const updatedSessionProgress = await this.prisma.sessionProgress.update({
+            where: { id: sessionProgress.id },
+            data: {
+                progress: progressData,
+                videos: data.videos ? [...new Set([...(sessionProgress.videos || []), ...data.videos])] : sessionProgress.videos,
+                notes: data.notes || sessionProgress.notes,
+                updatedAt: new Date(),
+            },
+        });
+        const existingLog = await this.prisma.exerciseLog.findFirst({
+            where: {
+                sessionId: workoutId,
+                exerciseId: sessionExercise.exerciseId,
+            },
+        });
+        if (existingLog) {
+            await this.prisma.exerciseLog.update({
+                where: { id: existingLog.id },
+                data: {
+                    setsCompleted: data.setsCompleted || existingLog.setsCompleted,
+                    reps: data.repsCompleted || existingLog.reps,
+                    weight: data.weight || existingLog.weight,
+                    notes: data.notes || existingLog.notes,
+                    completedAt: new Date(),
+                },
+            });
+        }
+        else {
+            await this.prisma.exerciseLog.create({
+                data: {
+                    sessionId: workoutId,
+                    exerciseId: sessionExercise.exerciseId,
+                    userId,
+                    setsCompleted: data.setsCompleted,
+                    reps: data.repsCompleted,
+                    weight: data.weight,
+                    notes: data.notes,
+                    completedAt: new Date(),
+                },
+            });
+        }
+        console.log(`🟢 [saveExerciseData] SessionProgress updated: ${updatedSessionProgress.id}`);
+        return {
+            sessionProgressId: updatedSessionProgress.id,
+            sessionProgress: updatedSessionProgress.progress,
+            status: updatedSessionProgress.status,
+            message: 'Exercise data saved',
+        };
+    }
+    async endWorkout(userId, sessionProgressId) {
+        const sessionProgress = await this.prisma.sessionProgress.findUnique({
+            where: { id: sessionProgressId },
+        });
+        if (!sessionProgress) {
+            throw new common_1.NotFoundException('SessionProgress not found');
+        }
+        if (sessionProgress.studentId !== userId) {
             throw new common_1.BadRequestException('Unauthorized');
         }
         const endTime = new Date();
-        const startTime = workout.startTime || workout.startedAt;
-        const duration = (endTime.getTime() - (startTime?.getTime() || 0)) / 1000 / 60;
-        const updatedWorkout = await this.prisma.workoutSession.update({
-            where: { id: workoutId },
+        const updatedSessionProgress = await this.prisma.sessionProgress.update({
+            where: { id: sessionProgressId },
             data: {
-                endedAt: endTime,
-                endTime: endTime,
-                duration: Math.round(duration * 60),
+                status: 'completed',
+                updatedAt: endTime,
             },
         });
-        const completed = updatedWorkout.exercisesCompleted || 0;
-        const total = updatedWorkout.totalExercises || 1;
         return {
-            workoutId: updatedWorkout.id,
-            completedAt: updatedWorkout.endedAt,
-            duration: Math.round(duration),
-            exercisesCompleted: completed,
-            totalExercises: total,
-            completionRate: Math.round((completed / total) * 100),
+            sessionProgressId: updatedSessionProgress.id,
+            status: updatedSessionProgress.status,
+            completedAt: endTime,
         };
     }
-    async getWorkoutProgress(userId, workoutId) {
-        const workout = await this.prisma.workoutSession.findUnique({
-            where: { id: workoutId },
+    async getWorkoutProgress(userId, sessionProgressId) {
+        const sessionProgress = await this.prisma.sessionProgress.findUnique({
+            where: { id: sessionProgressId },
+            include: {
+                session: {
+                    include: {
+                        exercises: {
+                            include: {
+                                exercise: true,
+                            },
+                        },
+                        week: {
+                            include: {
+                                block: {
+                                    include: {
+                                        program: true,
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
         });
-        if (!workout) {
-            throw new common_1.NotFoundException('Workout not found');
+        if (!sessionProgress) {
+            throw new common_1.NotFoundException('SessionProgress not found');
         }
-        if (workout.userId !== userId) {
+        if (sessionProgress.studentId !== userId) {
             throw new common_1.BadRequestException('Unauthorized');
         }
-        const logs = await this.prisma.exerciseLog.findMany({
-            where: { sessionId: workoutId },
-            orderBy: { completedAt: 'asc' },
-        });
-        const completed = workout.exercisesCompleted || 0;
-        const total = workout.totalExercises || 1;
+        const session = sessionProgress.session;
+        if (!session) {
+            throw new common_1.NotFoundException('Session not found');
+        }
+        const progressData = sessionProgress.progress || {};
+        const exercises = progressData.exercises || [];
+        const summary = progressData.summary || {};
+        const completed = summary.completedExercises || 0;
+        const total = summary.totalExercises || session.exercises?.length || 0;
         return {
-            workoutId,
+            sessionProgressId,
+            sessionId: session.id,
+            session,
+            sessionProgress,
+            status: sessionProgress.status || 'not_started',
             progress: {
                 completed,
                 total,
                 percentage: Math.round((completed / total) * 100),
+                summary,
             },
-            isActive: !workout.endedAt,
-            startedAt: workout.startedAt,
-            endedAt: workout.endedAt,
-            exerciseLogs: logs,
-            restPeriod: workout.restPeriodSeconds,
         };
     }
-    async skipExercise(userId, workoutId, exerciseIndex, reason) {
-        const workout = await this.prisma.workoutSession.findUnique({
-            where: { id: workoutId },
+    async skipExercise(userId, sessionProgressId, exerciseIndex, reason) {
+        const sessionProgress = await this.prisma.sessionProgress.findUnique({
+            where: { id: sessionProgressId },
         });
-        if (!workout) {
-            throw new common_1.NotFoundException('Workout not found');
+        if (!sessionProgress) {
+            throw new common_1.NotFoundException('SessionProgress not found');
         }
-        if (workout.userId !== userId) {
+        if (sessionProgress.studentId !== userId) {
             throw new common_1.BadRequestException('Unauthorized');
         }
-        await this.prisma.exerciseLog.create({
+        const progressData = sessionProgress.progress || {};
+        const exercises = progressData.exercises || [];
+        if (exercises[exerciseIndex]) {
+            exercises[exerciseIndex].status = 'skipped';
+            exercises[exerciseIndex].notes = reason || 'Exercise skipped';
+        }
+        await this.prisma.sessionProgress.update({
+            where: { id: sessionProgressId },
             data: {
-                sessionId: workoutId,
-                exerciseId: 'placeholder-exercise-id',
-                userId,
-                skipped: true,
-                notes: reason,
-                completedAt: new Date(),
+                progress: {
+                    ...progressData,
+                    exercises,
+                },
             },
         });
         return { message: 'Exercise skipped' };
@@ -176,6 +559,123 @@ let WorkoutRunnerService = class WorkoutRunnerService {
             orderBy: { endedAt: 'desc' },
             take: limit,
         });
+    }
+    async getSessionProgress(userId, sessionId) {
+        const sessionProgress = await this.prisma.sessionProgress.findFirst({
+            where: {
+                sessionId,
+                studentId: userId,
+            },
+            include: {
+                session: {
+                    include: {
+                        exercises: {
+                            include: {
+                                exercise: true,
+                            },
+                        },
+                    },
+                },
+            },
+        });
+        if (!sessionProgress) {
+            throw new common_1.NotFoundException('Session progress not found');
+        }
+        return sessionProgress;
+    }
+    async getOrInitializeSessionProgress(userId, sessionId) {
+        const session = await this.prisma.session.findUnique({
+            where: { id: sessionId },
+            include: {
+                exercises: {
+                    include: {
+                        exercise: true,
+                    },
+                },
+                week: {
+                    include: {
+                        block: {
+                            include: {
+                                program: true,
+                            },
+                        },
+                    },
+                },
+            },
+        });
+        if (!session) {
+            throw new common_1.NotFoundException('Session not found');
+        }
+        let sessionProgress = await this.prisma.sessionProgress.findFirst({
+            where: {
+                sessionId,
+                studentId: userId,
+            },
+        });
+        if (!sessionProgress) {
+            sessionProgress = await this.getOrCreateSessionProgress(sessionId, userId, session);
+        }
+        return {
+            sessionProgress,
+            session,
+            program: session.week?.block?.program,
+        };
+    }
+    validateExerciseConfig(config, type) {
+        switch (type) {
+            case workout_config_dto_1.ExerciseConfigType.STANDARD:
+                return config.sets > 0 && config.reps > 0;
+            case workout_config_dto_1.ExerciseConfigType.EMOM:
+                return config.totalMinutes > 0 && config.totalMinutes <= 60 && config.repsPerMinute > 0;
+            case workout_config_dto_1.ExerciseConfigType.AMRAP:
+                return config.timeMinutes > 0 && config.timeMinutes <= 60 && config.targetReps > 0;
+            case workout_config_dto_1.ExerciseConfigType.CIRCUIT:
+                return config.rounds > 0 && config.repsPerRound > 0;
+            default:
+                return false;
+        }
+    }
+    validateExerciseProgress(progress, type, config) {
+        switch (type) {
+            case workout_config_dto_1.ExerciseConfigType.STANDARD:
+                if (progress.setsCompleted <= 0 || progress.repsCompleted <= 0) {
+                    return { valid: false, error: 'Sets and reps must be positive' };
+                }
+                return { valid: true };
+            case workout_config_dto_1.ExerciseConfigType.EMOM:
+                if (!Array.isArray(progress.repsPerMinute)) {
+                    return { valid: false, error: 'repsPerMinute must be an array' };
+                }
+                if (progress.repsPerMinute.length > config.totalMinutes) {
+                    return {
+                        valid: false,
+                        error: `Cannot have more than ${config.totalMinutes} minute entries`,
+                    };
+                }
+                return { valid: true };
+            case workout_config_dto_1.ExerciseConfigType.AMRAP:
+                if (progress.totalReps <= 0) {
+                    return { valid: false, error: 'Total reps must be positive' };
+                }
+                return { valid: true };
+            case workout_config_dto_1.ExerciseConfigType.CIRCUIT:
+                if (progress.roundsCompleted <= 0 || progress.totalReps <= 0) {
+                    return { valid: false, error: 'Rounds and total reps must be positive' };
+                }
+                return { valid: true };
+            default:
+                return { valid: false, error: 'Unknown exercise type' };
+        }
+    }
+    async getCurrentSession(userId) {
+        let session = await this.prisma.workoutSession.findFirst({
+            where: {
+                userId,
+                endedAt: null,
+            },
+            orderBy: { startedAt: 'desc' },
+        });
+        return session || null;
     }
     async getWorkoutStats(userId) {
         const workouts = await this.prisma.workoutSession.findMany({

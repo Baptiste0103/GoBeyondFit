@@ -70,7 +70,7 @@ export declare class InvitationService {
         status: import(".prisma/client").$Enums.InvitationStatus;
         respondedAt: Date | null;
     }>;
-    deleteInvitation(invitationId: string, fromCoachId: string): Promise<{
+    deleteInvitation(invitationId: string, userId: string): Promise<{
         success: boolean;
     }>;
 }

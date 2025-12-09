@@ -53,6 +53,12 @@ let GroupController = class GroupController {
     async removeMember(groupId, memberUserId, req) {
         return this.groupService.removeMember(groupId, req.user.id, memberUserId);
     }
+    async getGroupMembers(groupId, req) {
+        return this.groupService.getGroupMembers(groupId, req.user.id);
+    }
+    async leaveGroup(groupId, req) {
+        return this.groupService.leaveGroup(groupId, req.user.id);
+    }
 };
 exports.GroupController = GroupController;
 __decorate([
@@ -198,6 +204,34 @@ __decorate([
     __metadata("design:paramtypes", [String, String, Object]),
     __metadata("design:returntype", Promise)
 ], GroupController.prototype, "removeMember", null);
+__decorate([
+    (0, common_1.Get)(':id/members'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, swagger_1.ApiOperation)({ summary: 'Get members of a group' }),
+    (0, swagger_1.ApiResponse)({
+        status: common_1.HttpStatus.OK,
+        description: 'List of group members',
+    }),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Request)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], GroupController.prototype, "getGroupMembers", null);
+__decorate([
+    (0, common_1.Post)(':id/leave'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, swagger_1.ApiOperation)({ summary: 'Leave a group as member' }),
+    (0, swagger_1.ApiResponse)({
+        status: common_1.HttpStatus.OK,
+        description: 'Left group successfully',
+    }),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Request)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], GroupController.prototype, "leaveGroup", null);
 exports.GroupController = GroupController = __decorate([
     (0, swagger_1.ApiTags)('Groups'),
     (0, swagger_1.ApiBearerAuth)(),

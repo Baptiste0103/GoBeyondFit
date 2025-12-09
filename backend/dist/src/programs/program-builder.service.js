@@ -243,34 +243,135 @@ let ProgramBuilderService = class ProgramBuilderService {
         if (program.ownerId !== userId && program.coachId !== userId) {
             throw new common_1.BadRequestException('You do not have permission to edit this program');
         }
+        await this.prisma.programBlock.deleteMany({
+            where: { programId },
+        });
+        let position = 0;
+        for (const blockData of saveData.blocks || []) {
+            const block = await this.prisma.programBlock.create({
+                data: {
+                    programId,
+                    title: blockData.title || `Block ${position + 1}`,
+                    position: position,
+                    notes: blockData.notes,
+                },
+            });
+            let weekPosition = 0;
+            for (const weekData of blockData.weeks || []) {
+                const week = await this.prisma.week.create({
+                    data: {
+                        blockId: block.id,
+                        weekNumber: weekData.weekNumber || weekPosition + 1,
+                        position: weekPosition,
+                    },
+                });
+                let sessionPosition = 0;
+                for (const sessionData of weekData.sessions || []) {
+                    const session = await this.prisma.session.create({
+                        data: {
+                            weekId: week.id,
+                            title: sessionData.title || `Session ${sessionPosition + 1}`,
+                            position: sessionPosition,
+                            date: sessionData.date,
+                            notes: sessionData.notes,
+                        },
+                    });
+                    let exercisePosition = 0;
+                    for (const exerciseData of sessionData.exercises || []) {
+                        if (!exerciseData.exerciseId) {
+                            console.warn('Exercise missing exerciseId, skipping', exerciseData);
+                            continue;
+                        }
+                        const exercise = await this.prisma.exercise.findUnique({
+                            where: { id: exerciseData.exerciseId },
+                        });
+                        if (!exercise) {
+                            console.warn(`Exercise ${exerciseData.exerciseId} not found, skipping`);
+                            continue;
+                        }
+                        await this.prisma.sessionExercise.create({
+                            data: {
+                                sessionId: session.id,
+                                exerciseId: exerciseData.exerciseId,
+                                position: exercisePosition,
+                                config: exerciseData.config || {},
+                            },
+                        });
+                        exercisePosition++;
+                    }
+                    sessionPosition++;
+                }
+                weekPosition++;
+            }
+            position++;
+        }
         return this.prisma.program.update({
             where: { id: programId },
             data: {
                 title: saveData.title,
                 description: saveData.description || program.description,
-                data: saveData.blocks,
                 isDraft: saveData.isDraft ?? true,
                 updatedAt: new Date(),
+            },
+            include: {
+                blocks: {
+                    include: {
+                        weeks: {
+                            include: {
+                                sessions: {
+                                    include: {
+                                        exercises: {
+                                            include: {
+                                                exercise: true,
+                                            },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
             },
         });
     }
     async getProgramDetails(programId, userId) {
         const program = await this.prisma.program.findUnique({
             where: { id: programId },
+            include: {
+                assignments: true,
+                blocks: {
+                    include: {
+                        weeks: {
+                            include: {
+                                sessions: {
+                                    include: {
+                                        exercises: {
+                                            include: {
+                                                exercise: true,
+                                            },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
         });
         if (!program) {
             throw new common_1.NotFoundException('Program not found');
         }
-        if (program.ownerId !== userId &&
-            program.coachId !== userId) {
-            throw new common_1.BadRequestException('You do not have permission to view this program');
+        const isCoach = program.coachId === userId || program.ownerId === userId;
+        const isAssigned = program.assignments?.some(a => a.studentId === userId);
+        if (!isCoach && !isAssigned) {
+            throw new common_1.ForbiddenException('You do not have permission to view this program');
         }
         return {
             id: program.id,
             title: program.title,
             description: program.description,
             isDraft: program.isDraft,
-            blocks: program.data || [],
+            blocks: program.blocks || [],
             ownerId: program.ownerId,
             coachId: program.coachId,
             createdAt: program.createdAt,

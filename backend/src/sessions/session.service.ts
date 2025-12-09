@@ -142,21 +142,11 @@ export class SessionService {
       throw new ForbiddenException('Access denied to this session');
     }
 
-    // Verify exercise instance exists in this session
-    const exerciseInstance = await this.prisma.sessionExercise.findUnique({
-      where: { id: progressData.exerciseInstanceId },
-    });
-
-    if (!exerciseInstance || exerciseInstance.sessionId !== sessionId) {
-      throw new BadRequestException('Invalid exercise instance for this session');
-    }
-
     // Check if progress already exists
     let existingProgress = await this.prisma.sessionProgress.findFirst({
       where: {
         sessionId,
         studentId,
-        exerciseInstanceId: progressData.exerciseInstanceId,
       },
     });
 
@@ -168,6 +158,7 @@ export class SessionService {
           progress: progressData.progress,
           notes: progressData.notes,
           videos: progressData.videos || [],
+          updatedAt: new Date(),
         },
       });
     } else {
@@ -176,7 +167,6 @@ export class SessionService {
         data: {
           sessionId,
           studentId,
-          exerciseInstanceId: progressData.exerciseInstanceId,
           progress: progressData.progress,
           notes: progressData.notes,
           videos: progressData.videos || [],
@@ -212,7 +202,6 @@ export class SessionService {
 
     return this.prisma.sessionProgress.findMany({
       where: { sessionId, studentId },
-      include: { exerciseInstance: { include: { exercise: true } } },
     });
   }
 

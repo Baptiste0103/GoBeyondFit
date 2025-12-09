@@ -5,7 +5,8 @@ declare enum InvitationStatus {
 }
 export declare class SendInvitationDto {
     groupId: string;
-    toUserId: string;
+    toUserId?: string;
+    toPseudo?: string;
     message?: string;
 }
 export declare class RespondToInvitationDto {

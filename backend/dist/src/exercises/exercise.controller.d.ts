@@ -22,24 +22,7 @@ export declare class ExerciseController {
         ownerId: string | null;
     }>;
     searchLibrary(req: any, search?: string, difficulty?: string, muscleGroup?: string, page?: number, limit?: number): Promise<{
-        data: ({
-            owner: {
-                pseudo: string;
-                firstName: string | null;
-                lastName: string | null;
-                id: string;
-            } | null;
-        } & {
-            type: import(".prisma/client").$Enums.ExerciseType;
-            name: string;
-            id: string;
-            createdAt: Date;
-            updatedAt: Date;
-            description: string | null;
-            meta: import("@prisma/client/runtime/library").JsonValue | null;
-            scope: import(".prisma/client").$Enums.Scope;
-            ownerId: string | null;
-        })[];
+        data: any[];
         pagination: {
             total: number;
             page: number;

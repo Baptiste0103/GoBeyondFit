@@ -1,0 +1,133 @@
+Issue Title: Feat: Student Workout Runner, Aggressive Video Compression & In-DB Storage
+1. Context & High-Level Goals
+Implement the Student "Workout Runner" interface. Critical Constraint: Videos must be stored as BLOBs (Bytes) in PostgreSQL (via Prisma). To prevents database bloat and performance issues, you must implement a multi-layer compression strategy to keep files extremely small (< 8MB).
+2. Video Storage & Compression Strategy (Mandatory)
+Since we are bypassing object storage (S3/Supabase Storage) for direct DB storage, implement ALL the following reduction techniques:
+Layer 1: Frontend Restrictions (Pre-Upload)
+•	Time Limit: Enforce a hard limit of 15 seconds per video recording/upload.
+•	Client-Side Compression: Use @ffmpeg/ffmpeg (WebAssembly) or the native MediaStream API to compress before the file leaves the browser.
+o	Resolution: Resize to 480p (854x480) or max 720p.
+o	Frame Rate: Cap at 24 FPS (standard cinematic look is sufficient for form checks, 60fps is unnecessary data).
+o	Bitrate: Cap at 1 Mbps.
+Layer 2: API Middleware (Upload Guard)
+•	File Size Limit: Reject any payload larger than 15MB immediately (413 Payload Too Large).
+•	File Type: Accept only video/mp4, video/webm.
+Layer 3: Backend Processing (Pre-Storage)
+•	Server-Side Transcoding: Use fluent-ffmpeg in NestJS to re-process the buffer before DB insertion.
+o	Ensure the final stored binary is H.264 (libx264) or WebM (VP9) for maximum efficiency.
+o	Strip audio if possible (optional, but saves space).
+3. Database Schema (Prisma)
+•	Update Enum: Add circuit to ExerciseType.
+•	Create ExerciseMedia Table: Store heavy data apart from the lightweight JSON logs.
+Extrait de code
+model ExerciseMedia {
+  id        String   @id @default(uuid())
+  progressId String
+  progress  SessionProgress @relation(fields: [progressId], references: [id], onDelete: Cascade)
+  data      Bytes    // The highly compressed video blob
+  mimeType  String   // e.g., "video/mp4"
+  size      Int      // Size in bytes
+  createdAt DateTime @default(now())
+
+  @@map("exercise_media")
+}
+4. JSON Data Structures (Strict Implementation)
+The Frontend (Zod) and Backend (DTOs) must strictly adhere to these disparate structures for Coach Configuration vs. Student Logging.
+A. STANDARD
+•	Coach (Config): Defines the target.
+JSON
+{
+  "type": "standard",
+  "sets": 4,
+  "repsTarget": "8-12",
+  "restTimeSeconds": 90,
+  "rpeTarget": 8
+}
+•	Student (Progress): Logs detailed performance.
+JSON
+{
+  "type": "standard",
+  "globalRpe": 8,
+  "logs": [
+    { "set": 1, "reps": 12, "weight": 60, "rpe": 7 },
+    { "set": 2, "reps": 10, "weight": 65, "rpe": 8 },
+    { "set": 3, "reps": 9, "weight": 65, "rpe": 9 },
+    { "set": 4, "reps": 8, "weight": 65, "rpe": 9.5 }
+  ]
+}
+B. EMOM
+•	Coach (Config):
+JSON
+{
+  "type": "emom",
+  "durationMinutes": 10,
+  "exerciseDetails": "15 Kettlebell Swings @ 24kg"
+}
+•	Student (Progress): Simple boolean completion + RPE.
+JSON
+{
+  "type": "emom",
+  "completed": true,
+  "globalRpe": 9
+}
+C. AMRAP
+•	Coach (Config):
+JSON
+{
+  "type": "amrap",
+  "timeCapMinutes": 12,
+  "instruction": "Max Burpees over bar"
+}
+•	Student (Progress): Simple boolean completion.
+JSON
+{
+  "type": "amrap",
+  "completed": true
+}
+D. CIRCUIT
+•	Coach (Config):
+JSON
+{
+  "type": "circuit",
+  "rounds": 3,
+  "restBetweenRoundsSeconds": 120,
+  "stations": [
+    { "stationId": "ex_1", "name": "Tractions", "target": "10 reps" },
+    { "stationId": "ex_2", "name": "Pompes", "target": "20 reps" },
+    { "stationId": "ex_3", "name": "Air Squats", "target": "30 reps" }
+  ]
+}
+•	Student (Progress): Round-by-round completion tracking.
+JSON
+{
+  "type": "circuit",
+  "roundsCompleted": 3,
+  "globalRpe": 8.5,
+  "logs": [
+    { "round": 1, "completed": true },
+    { "round": 2, "completed": true },
+    { "round": 3, "completed": true }
+  ]
+}
+5. Functional Requirements & UI Logic
+Dashboard & Navigation
+•	"Current Session" Widget: Automatically find the first incomplete session (or the one modified today) and display it on the student dashboard for quick access.
+•	Program List: Sort all assigned programs by date (descending).
+Workout Runner Interface
+•	Ghost Rows (Coach Plan): Display the Coach's requirements (Config) in a distinct visual style (e.g., greyed out text, "Target" label). This is read-only.
+•	Input Rows (Student Log):
+o	Dynamic forms based on ExerciseType (Inputs for Standard, Checkboxes for EMOM/AMRAP/Circuit).
+o	Real-Time Sync: Use React Query polling (e.g., refetchInterval: 5000). If the Coach edits the Config in the DB, the Ghost Row must update without refreshing the page.
+o	Edit Conflict Protection: If the student has already started typing in an Input Row, do NOT overwrite their draft even if a polling update arrives. Only update the Ghost Row.
+PDF Export
+•	Add a "Download PDF" button on the Program view.
+•	Endpoint: GET /api/programs/:id/pdf.
+•	The PDF should list the full program details (Weeks > Sessions > Exercises > Targets) in a clean, printable format.
+6. Implementation Checklist
+1.	[ ] Backend: Install fluent-ffmpeg. Create VideoService to handle buffer compression (resize 480p, 24fps).
+2.	[ ] Backend: Implement ExerciseMedia table in Prisma.
+3.	[ ] Frontend: Install @ffmpeg/ffmpeg (Wasm) or configure media recorder constraints for low quality.
+4.	[ ] Frontend: Build WorkoutSession component with react-hook-form handling the 4 specific JSON structures.
+5.	[ ] Frontend: Implement "Current Session" logic on Dashboard.
+6.	[ ] General: Ensure PDF generation includes all exercise details.
+

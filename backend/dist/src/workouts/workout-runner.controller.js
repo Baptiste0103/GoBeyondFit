@@ -24,8 +24,30 @@ let WorkoutRunnerController = class WorkoutRunnerController {
     async startWorkout(sessionId, config, req) {
         return this.workoutService.startWorkout(req.user.id, sessionId, config);
     }
+    async getSessionStatus(sessionId, req) {
+        return this.workoutService.getSessionStatus(req.user.id, sessionId);
+    }
+    async getHistory(limit = 20, req) {
+        return this.workoutService.getUserWorkoutHistory(req.user.id, Math.min(limit, 100));
+    }
+    async getCurrentSession(req) {
+        const session = await this.workoutService.getCurrentSession(req.user.id);
+        if (!session) {
+            return { session: null, message: 'No active workout session' };
+        }
+        return { session };
+    }
+    async getStats(req) {
+        return this.workoutService.getWorkoutStats(req.user.id);
+    }
+    async getSessionProgress(sessionId, req) {
+        return this.workoutService.getOrInitializeSessionProgress(req.user.id, sessionId);
+    }
     async completeExercise(workoutId, exerciseIndex, data, req) {
         return this.workoutService.completeExercise(req.user.id, workoutId, exerciseIndex, data);
+    }
+    async saveExerciseData(workoutId, exerciseIndex, data, req) {
+        return this.workoutService.saveExerciseData(req.user.id, workoutId, exerciseIndex, data);
     }
     async skipExercise(workoutId, exerciseIndex, { reason }, req) {
         return this.workoutService.skipExercise(req.user.id, workoutId, exerciseIndex, reason);
@@ -35,12 +57,6 @@ let WorkoutRunnerController = class WorkoutRunnerController {
     }
     async getProgress(workoutId, req) {
         return this.workoutService.getWorkoutProgress(req.user.id, workoutId);
-    }
-    async getHistory(limit = 20, req) {
-        return this.workoutService.getUserWorkoutHistory(req.user.id, Math.min(limit, 100));
-    }
-    async getStats(req) {
-        return this.workoutService.getWorkoutStats(req.user.id);
     }
 };
 exports.WorkoutRunnerController = WorkoutRunnerController;
@@ -55,6 +71,44 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], WorkoutRunnerController.prototype, "startWorkout", null);
 __decorate([
+    (0, common_1.Get)('session/:sessionId/status'),
+    __param(0, (0, common_1.Param)('sessionId')),
+    __param(1, (0, common_1.Request)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], WorkoutRunnerController.prototype, "getSessionStatus", null);
+__decorate([
+    (0, common_1.Get)('history/list'),
+    __param(0, (0, common_1.Query)('limit', new common_1.DefaultValuePipe(20), common_1.ParseIntPipe)),
+    __param(1, (0, common_1.Request)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number, Object]),
+    __metadata("design:returntype", Promise)
+], WorkoutRunnerController.prototype, "getHistory", null);
+__decorate([
+    (0, common_1.Get)('current'),
+    __param(0, (0, common_1.Request)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], WorkoutRunnerController.prototype, "getCurrentSession", null);
+__decorate([
+    (0, common_1.Get)('stats/summary'),
+    __param(0, (0, common_1.Request)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], WorkoutRunnerController.prototype, "getStats", null);
+__decorate([
+    (0, common_1.Get)('session/:sessionId/progress'),
+    __param(0, (0, common_1.Param)('sessionId')),
+    __param(1, (0, common_1.Request)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], WorkoutRunnerController.prototype, "getSessionProgress", null);
+__decorate([
     (0, common_1.Post)(':workoutId/exercise/:exerciseIndex/complete'),
     (0, common_1.HttpCode)(200),
     __param(0, (0, common_1.Param)('workoutId')),
@@ -65,6 +119,17 @@ __decorate([
     __metadata("design:paramtypes", [String, Number, Object, Object]),
     __metadata("design:returntype", Promise)
 ], WorkoutRunnerController.prototype, "completeExercise", null);
+__decorate([
+    (0, common_1.Post)(':workoutId/exercise/:exerciseIndex/save'),
+    (0, common_1.HttpCode)(200),
+    __param(0, (0, common_1.Param)('workoutId')),
+    __param(1, (0, common_1.Param)('exerciseIndex', common_1.ParseIntPipe)),
+    __param(2, (0, common_1.Body)()),
+    __param(3, (0, common_1.Request)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Number, Object, Object]),
+    __metadata("design:returntype", Promise)
+], WorkoutRunnerController.prototype, "saveExerciseData", null);
 __decorate([
     (0, common_1.Post)(':workoutId/exercise/:exerciseIndex/skip'),
     (0, common_1.HttpCode)(200),
@@ -93,21 +158,6 @@ __decorate([
     __metadata("design:paramtypes", [String, Object]),
     __metadata("design:returntype", Promise)
 ], WorkoutRunnerController.prototype, "getProgress", null);
-__decorate([
-    (0, common_1.Get)('history/list'),
-    __param(0, (0, common_1.Query)('limit', new common_1.DefaultValuePipe(20), common_1.ParseIntPipe)),
-    __param(1, (0, common_1.Request)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Number, Object]),
-    __metadata("design:returntype", Promise)
-], WorkoutRunnerController.prototype, "getHistory", null);
-__decorate([
-    (0, common_1.Get)('stats/summary'),
-    __param(0, (0, common_1.Request)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
-    __metadata("design:returntype", Promise)
-], WorkoutRunnerController.prototype, "getStats", null);
 exports.WorkoutRunnerController = WorkoutRunnerController = __decorate([
     (0, common_1.Controller)('workouts'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),

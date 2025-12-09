@@ -20,6 +20,7 @@ var InvitationStatus;
 class SendInvitationDto {
     groupId;
     toUserId;
+    toPseudo;
     message;
 }
 exports.SendInvitationDto = SendInvitationDto;
@@ -30,9 +31,14 @@ __decorate([
 ], SendInvitationDto.prototype, "groupId", void 0);
 __decorate([
     (0, class_validator_1.IsUUID)(),
-    (0, class_validator_1.IsNotEmpty)(),
+    (0, class_validator_1.IsOptional)(),
     __metadata("design:type", String)
 ], SendInvitationDto.prototype, "toUserId", void 0);
+__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", String)
+], SendInvitationDto.prototype, "toPseudo", void 0);
 __decorate([
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsOptional)(),

@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common'
+import { Injectable, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 
 export interface FilterOptions {
@@ -345,14 +345,114 @@ export class ProgramBuilderService {
       throw new BadRequestException('You do not have permission to edit this program')
     }
 
+    // Delete existing blocks (cascade will delete weeks, sessions, exercises)
+    await this.prisma.programBlock.deleteMany({
+      where: { programId },
+    })
+
+    // Create new blocks with their structure
+    let position = 0
+    for (const blockData of saveData.blocks || []) {
+      const block = await this.prisma.programBlock.create({
+        data: {
+          programId,
+          title: blockData.title || `Block ${position + 1}`,
+          position: position,
+          notes: blockData.notes,
+        },
+      })
+
+      // Create weeks for this block
+      let weekPosition = 0
+      for (const weekData of blockData.weeks || []) {
+        const week = await this.prisma.week.create({
+          data: {
+            blockId: block.id,
+            weekNumber: weekData.weekNumber || weekPosition + 1,
+            position: weekPosition,
+          },
+        })
+
+        // Create sessions for this week
+        let sessionPosition = 0
+        for (const sessionData of weekData.sessions || []) {
+          const session = await this.prisma.session.create({
+            data: {
+              weekId: week.id,
+              title: sessionData.title || `Session ${sessionPosition + 1}`,
+              position: sessionPosition,
+              date: sessionData.date,
+              notes: sessionData.notes,
+            },
+          })
+
+          // Create exercises for this session
+          let exercisePosition = 0
+          for (const exerciseData of sessionData.exercises || []) {
+            // exerciseData should have exerciseId property
+            if (!exerciseData.exerciseId) {
+              console.warn('Exercise missing exerciseId, skipping', exerciseData)
+              continue
+            }
+
+            // Verify exercise exists
+            const exercise = await this.prisma.exercise.findUnique({
+              where: { id: exerciseData.exerciseId },
+            })
+
+            if (!exercise) {
+              console.warn(`Exercise ${exerciseData.exerciseId} not found, skipping`)
+              continue
+            }
+
+            await this.prisma.sessionExercise.create({
+              data: {
+                sessionId: session.id,
+                exerciseId: exerciseData.exerciseId,
+                position: exercisePosition,
+                config: exerciseData.config || {},
+              },
+            })
+
+            exercisePosition++
+          }
+
+          sessionPosition++
+        }
+
+        weekPosition++
+      }
+
+      position++
+    }
+
+    // Update program metadata
     return this.prisma.program.update({
       where: { id: programId },
       data: {
         title: saveData.title,
         description: saveData.description || program.description,
-        data: saveData.blocks,
         isDraft: saveData.isDraft ?? true,
         updatedAt: new Date(),
+      },
+      include: {
+        blocks: {
+          include: {
+            weeks: {
+              include: {
+                sessions: {
+                  include: {
+                    exercises: {
+                      include: {
+                        exercise: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
       },
     })
   }
@@ -363,18 +463,38 @@ export class ProgramBuilderService {
   async getProgramDetails(programId: string, userId: string) {
     const program = await this.prisma.program.findUnique({
       where: { id: programId },
+      include: {
+        assignments: true,
+        blocks: {
+          include: {
+            weeks: {
+              include: {
+                sessions: {
+                  include: {
+                    exercises: {
+                      include: {
+                        exercise: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
     })
 
     if (!program) {
       throw new NotFoundException('Program not found')
     }
 
-    // Check if user has access
-    if (
-      program.ownerId !== userId &&
-      program.coachId !== userId
-    ) {
-      throw new BadRequestException('You do not have permission to view this program')
+    // Check if user has access: coach/owner OR assigned student
+    const isCoach = program.coachId === userId || program.ownerId === userId;
+    const isAssigned = program.assignments?.some(a => a.studentId === userId);
+
+    if (!isCoach && !isAssigned) {
+      throw new ForbiddenException('You do not have permission to view this program')
     }
 
     return {
@@ -382,7 +502,7 @@ export class ProgramBuilderService {
       title: program.title,
       description: program.description,
       isDraft: program.isDraft,
-      blocks: program.data || [],
+      blocks: program.blocks || [],
       ownerId: program.ownerId,
       coachId: program.coachId,
       createdAt: program.createdAt,

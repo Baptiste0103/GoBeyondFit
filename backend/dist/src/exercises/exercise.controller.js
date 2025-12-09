@@ -27,12 +27,14 @@ let ExerciseController = class ExerciseController {
         return this.exerciseService.create(createExerciseDto, req.user.id);
     }
     async searchLibrary(req, search, difficulty, muscleGroup, page, limit) {
+        const finalLimit = Math.min(3500, Math.max(1, limit || 20));
+        console.log('[ExerciseController] searchLibrary called with:', { limit, finalLimit });
         return this.exerciseService.searchLibrary({
             search,
             difficulty,
             muscleGroup,
             page: Math.max(1, page || 1),
-            limit: Math.min(100, Math.max(1, limit || 20)),
+            limit: finalLimit,
             userId: req.user.id,
         });
     }

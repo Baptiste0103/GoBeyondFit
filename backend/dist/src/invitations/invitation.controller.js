@@ -118,8 +118,6 @@ __decorate([
 ], InvitationController.prototype, "rejectInvitation", null);
 __decorate([
     (0, common_1.Delete)(':id'),
-    (0, common_1.UseGuards)(roles_guard_1.RolesGuard),
-    (0, roles_guard_1.Roles)(roles_guard_1.UserRole.COACH, roles_guard_1.UserRole.ADMIN),
     (0, swagger_1.ApiOperation)({ summary: 'Delete invitation' }),
     (0, swagger_1.ApiResponse)({
         status: common_1.HttpStatus.OK,

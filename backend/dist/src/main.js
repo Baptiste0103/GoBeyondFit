@@ -19,6 +19,7 @@ async function bootstrap() {
         }
         throw error;
     }
+    app.setGlobalPrefix('api');
     app.enableCors({
         origin: process.env.CORS_ORIGIN || 'http://localhost:3001',
         credentials: true,

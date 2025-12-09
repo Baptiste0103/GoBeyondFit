@@ -77,44 +77,36 @@ export declare class SessionService {
     }>;
     saveProgress(sessionId: string, studentId: string, progressData: CreateSessionProgressDto): Promise<{
         id: string;
+        updatedAt: Date;
+        sets: number | null;
+        reps: number | null;
+        status: string | null;
+        format: string | null;
         notes: string | null;
         studentId: string;
         progress: import("@prisma/client/runtime/library").JsonValue | null;
         sessionId: string;
+        weight: number | null;
         exerciseInstanceId: string | null;
         videos: string[];
         savedAt: Date;
     }>;
-    getStudentProgress(sessionId: string, studentId: string): Promise<({
-        exerciseInstance: ({
-            exercise: {
-                type: import(".prisma/client").$Enums.ExerciseType;
-                name: string;
-                id: string;
-                createdAt: Date;
-                updatedAt: Date;
-                description: string | null;
-                meta: import("@prisma/client/runtime/library").JsonValue | null;
-                scope: import(".prisma/client").$Enums.Scope;
-                ownerId: string | null;
-            };
-        } & {
-            id: string;
-            exerciseId: string;
-            position: number;
-            config: import("@prisma/client/runtime/library").JsonValue | null;
-            sessionId: string;
-        }) | null;
-    } & {
+    getStudentProgress(sessionId: string, studentId: string): Promise<{
         id: string;
+        updatedAt: Date;
+        sets: number | null;
+        reps: number | null;
+        status: string | null;
+        format: string | null;
         notes: string | null;
         studentId: string;
         progress: import("@prisma/client/runtime/library").JsonValue | null;
         sessionId: string;
+        weight: number | null;
         exerciseInstanceId: string | null;
         videos: string[];
         savedAt: Date;
-    })[]>;
+    }[]>;
     addExerciseToSession(sessionId: string, exerciseId: string, coachId: string, config?: {
         sets?: number;
         reps?: number;

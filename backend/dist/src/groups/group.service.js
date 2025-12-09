@@ -18,6 +18,13 @@ let GroupService = class GroupService {
         this.prisma = prisma;
     }
     async create(createGroupDto, userId) {
+        const user = await this.prisma.user.findUnique({ where: { id: userId } });
+        if (!user) {
+            throw new common_1.NotFoundException('User not found');
+        }
+        if (user.role !== 'coach' && user.role !== 'admin') {
+            throw new common_1.ForbiddenException('Only coaches can create groups');
+        }
         return this.prisma.group.create({
             data: {
                 ...createGroupDto,
@@ -260,6 +267,58 @@ let GroupService = class GroupService {
         return this.prisma.groupMember.delete({
             where: { id: member.id },
         });
+    }
+    async getGroupMembers(groupId, userId) {
+        const group = await this.prisma.group.findUnique({ where: { id: groupId } });
+        if (!group) {
+            throw new common_1.NotFoundException('Group not found');
+        }
+        const isMember = await this.prisma.groupMember.findFirst({
+            where: {
+                groupId,
+                userId,
+            },
+        });
+        if (group.ownerId !== userId && !isMember) {
+            throw new common_1.ForbiddenException('You do not have permission to view this group members');
+        }
+        const members = await this.prisma.groupMember.findMany({
+            where: { groupId },
+            include: {
+                user: {
+                    select: {
+                        id: true,
+                        pseudo: true,
+                        email: true,
+                        firstName: true,
+                        lastName: true,
+                    },
+                },
+            },
+        });
+        return members;
+    }
+    async leaveGroup(groupId, userId) {
+        const group = await this.prisma.group.findUnique({ where: { id: groupId } });
+        if (!group) {
+            throw new common_1.NotFoundException('Group not found');
+        }
+        if (group.ownerId === userId) {
+            throw new common_1.ForbiddenException('Owner cannot leave their own group');
+        }
+        const member = await this.prisma.groupMember.findFirst({
+            where: {
+                groupId,
+                userId,
+            },
+        });
+        if (!member) {
+            throw new common_1.NotFoundException('You are not a member of this group');
+        }
+        await this.prisma.groupMember.delete({
+            where: { id: member.id },
+        });
+        return { success: true, message: 'Left group successfully' };
     }
 };
 exports.GroupService = GroupService;

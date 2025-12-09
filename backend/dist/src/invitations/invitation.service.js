@@ -30,8 +30,22 @@ let InvitationService = class InvitationService {
         if (group.ownerId !== fromCoachId) {
             throw new common_1.BadRequestException('You can only send invitations for groups you own');
         }
+        let toUserId = dto.toUserId;
+        if (!toUserId && dto.toPseudo) {
+            const user = await this.prisma.user.findFirst({
+                where: { pseudo: { equals: dto.toPseudo, mode: 'insensitive' } },
+                select: { id: true },
+            });
+            if (!user) {
+                throw new common_1.NotFoundException(`User with pseudo ${dto.toPseudo} not found`);
+            }
+            toUserId = user.id;
+        }
+        else if (!toUserId) {
+            throw new common_1.BadRequestException('Either toUserId or toPseudo must be provided');
+        }
         const toUser = await this.prisma.user.findUnique({
-            where: { id: dto.toUserId },
+            where: { id: toUserId },
         });
         if (!toUser) {
             throw new common_1.NotFoundException('User not found');
@@ -39,7 +53,7 @@ let InvitationService = class InvitationService {
         const existingInvitation = await this.prisma.invitation.findFirst({
             where: {
                 groupId: dto.groupId,
-                toUserId: dto.toUserId,
+                toUserId: toUserId,
                 status: 'pending',
             },
         });
@@ -53,7 +67,7 @@ let InvitationService = class InvitationService {
             data: {
                 groupId: dto.groupId,
                 fromCoachId,
-                toUserId: dto.toUserId,
+                toUserId: toUserId,
                 status: 'pending',
             },
             include: {
@@ -86,9 +100,7 @@ let InvitationService = class InvitationService {
     }
     async getInvitationsForUser(userId, status) {
         const where = { toUserId: userId };
-        if (status) {
-            where.status = status;
-        }
+        where.status = status || 'pending';
         const invitations = await this.prisma.invitation.findMany({
             where,
             include: {
@@ -147,13 +159,21 @@ let InvitationService = class InvitationService {
                 respondedAt: new Date(),
             },
         });
-        await this.prisma.groupMember.create({
-            data: {
+        const existingMember = await this.prisma.groupMember.findFirst({
+            where: {
                 groupId: invitation.groupId,
                 userId: invitation.toUserId,
-                roleInGroup: 'member',
             },
         });
+        if (!existingMember) {
+            await this.prisma.groupMember.create({
+                data: {
+                    groupId: invitation.groupId,
+                    userId: invitation.toUserId,
+                    roleInGroup: 'member',
+                },
+            });
+        }
         return {
             id: updatedInvitation.id,
             status: updatedInvitation.status,
@@ -186,15 +206,17 @@ let InvitationService = class InvitationService {
             respondedAt: updatedInvitation.respondedAt,
         };
     }
-    async deleteInvitation(invitationId, fromCoachId) {
+    async deleteInvitation(invitationId, userId) {
         const invitation = await this.prisma.invitation.findUnique({
             where: { id: invitationId },
         });
         if (!invitation) {
             throw new common_1.NotFoundException('Invitation not found');
         }
-        if (invitation.fromCoachId !== fromCoachId) {
-            throw new common_1.BadRequestException('You can only delete your own invitations');
+        const isCoachWhoSent = invitation.fromCoachId === userId;
+        const isStudentWhoReceived = invitation.toUserId === userId;
+        if (!isCoachWhoSent && !isStudentWhoReceived) {
+            throw new common_1.BadRequestException('You do not have permission to delete this invitation');
         }
         await this.prisma.invitation.delete({
             where: { id: invitationId },

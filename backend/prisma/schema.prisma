@@ -35,7 +35,6 @@ model User {
   exerciseRatings     ExerciseRating[]
   exerciseHistory     ExerciseHistory[]
   favoriteExercises   FavoriteExercise[]
-  workoutSessions     WorkoutSession[]
   coach               User?               @relation("CoachStudents", fields: [coachId], references: [id])
   students            User[]              @relation("CoachStudents")
 
@@ -81,7 +80,6 @@ model Invitation {
   group       Group            @relation(fields: [groupId], references: [id], onDelete: Cascade)
   toUser      User             @relation("ReceivedInvitations", fields: [toUserId], references: [id])
 
-  @@unique([groupId, toUserId, status])
   @@map("invitations")
 }
 
@@ -100,7 +98,6 @@ model Exercise {
   ratings          ExerciseRating[]
   history          ExerciseHistory[]
   favorites        FavoriteExercise[]
-  logs             ExerciseLog[]
 
   @@map("exercises")
 }
@@ -148,51 +145,6 @@ model FavoriteExercise {
   @@index([userId])
   @@index([exerciseId])
   @@map("favorite_exercises")
-}
-
-model WorkoutSession {
-  id                    String       @id @default(uuid())
-  user                  User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId                String
-  title                 String?
-  startedAt             DateTime     @default(now())
-  startTime             DateTime?    // Alternative field for compatibility
-  endedAt               DateTime?
-  endTime               DateTime?    // Alternative field for compatibility
-  duration              Int?         // in seconds
-  notes                 String?
-  restPeriodSeconds     Int?         @default(60)
-  formGuidanceEnabled   Boolean?     @default(true)
-  exercisesCompleted    Int?         @default(0)
-  totalExercises        Int?         @default(0)
-  logs                  ExerciseLog[]
-
-  @@index([userId])
-  @@index([startedAt])
-  @@map("workout_sessions")
-}
-
-model ExerciseLog {
-  id           String         @id @default(uuid())
-  session      WorkoutSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  sessionId    String
-  exercise     Exercise       @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
-  exerciseId   String
-  userId       String?        // For filtering by user
-  reps         Int?
-  sets         Int?
-  setsCompleted Int?
-  weight       Float?
-  duration     Int?           // in seconds
-  formRating   Int?           // 1-5 scale
-  skipped      Boolean?       @default(false)
-  notes        String?
-  loggedAt     DateTime       @default(now())
-  completedAt  DateTime?
-
-  @@index([sessionId])
-  @@index([exerciseId])
-  @@map("exercise_logs")
 }
 
 model Program {
@@ -259,7 +211,6 @@ model SessionExercise {
   position          Int
   exercise          Exercise          @relation(fields: [exerciseId], references: [id])
   session           Session           @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  progressInstances SessionProgress[]
 
   @@map("session_exercises")
 }
@@ -268,16 +219,48 @@ model SessionProgress {
   id                 String           @id @default(uuid())
   sessionId          String
   studentId          String
-  exerciseInstanceId String?
-  progress           Json?
-  notes              String?
-  videos             String[]
+  // Complete session data stored as JSON containing all exercises, notes, videos, and progress
+  progress           Json?            // Structure adaptée au type d'exercice:
+                                       // {
+                                       //   sessionId, sessionTitle, sessionNotes, week, block, program,
+                                       //   exercises: [{
+                                       //     position, exerciseId, exerciseName, exerciseType, config,
+                                       //     status, notes, videos,
+                                       //     data: (dépend du type)
+                                       //       - standard: { setsCompleted, repsCompleted, weightUsed, rpe, notes }
+                                       //       - EMOM: { repsPerMinute[], rpe, notes }
+                                       //       - AMRAP: { totalReps, rpe, notes }
+                                       //       - circuit: { roundsCompleted, totalReps, weightUsed, rpe, notes }
+                                       //   }],
+                                       //   summary: { totalExercises, completedExercises, inProgressExercises }
+                                       // }
+  notes              String?          // Session-level notes
+  videos             String[]         // Video URLs/references
+  reps               Int?
+  sets               Int?
+  weight             Float?
+  format             String?          // Exercise format type (standard, EMOM, AMRAP, circuit)
+  status             String?          @default("not_started") // not_started, pending, partial, completed
   savedAt            DateTime         @default(now())
-  exerciseInstance   SessionExercise? @relation(fields: [exerciseInstanceId], references: [id])
+  updatedAt          DateTime         @updatedAt
   session            Session          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   student            User             @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  media              ExerciseMedia[]  @relation("ProgressMedia")
 
+  @@unique([sessionId, studentId])
   @@map("session_progress")
+}
+
+model ExerciseMedia {
+  id        String          @id @default(uuid())
+  progressId String
+  progress  SessionProgress @relation("ProgressMedia", fields: [progressId], references: [id], onDelete: Cascade)
+  data      Bytes           // Highly compressed video blob
+  mimeType  String          // e.g., "video/mp4"
+  size      Int             // Size in bytes
+  createdAt DateTime        @default(now())
+
+  @@map("exercise_media")
 }
 
 model ProgramAssignment {
@@ -350,6 +333,7 @@ enum ExerciseType {
   standard
   EMOM
   AMRAP
+  circuit
   custom
 }
 

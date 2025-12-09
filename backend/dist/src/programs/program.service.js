@@ -336,13 +336,33 @@ let ProgramService = class ProgramService {
             },
         });
     }
-    async assignToStudent(programId, studentId, coachId) {
+    async assignToStudent(programId, studentId, coachId, groupId) {
         const program = await this.prisma.program.findUnique({ where: { id: programId } });
         if (!program) {
             throw new common_1.NotFoundException('Program not found');
         }
         if (program.coachId !== coachId) {
             throw new common_1.ForbiddenException('Only the coach can assign programs');
+        }
+        if (groupId) {
+            const group = await this.prisma.group.findUnique({
+                where: { id: groupId },
+            });
+            if (!group) {
+                throw new common_1.NotFoundException('Group not found');
+            }
+            if (group.ownerId !== coachId) {
+                throw new common_1.ForbiddenException('You can only assign programs to groups you own');
+            }
+            const isMember = await this.prisma.groupMember.findFirst({
+                where: {
+                    groupId,
+                    userId: studentId,
+                },
+            });
+            if (!isMember) {
+                throw new common_1.ForbiddenException('Student must be a member of the group to receive program assignment');
+            }
         }
         const existing = await this.prisma.programAssignment.findFirst({
             where: { programId, studentId },
@@ -368,8 +388,8 @@ let ProgramService = class ProgramService {
         if (!assignment) {
             throw new common_1.NotFoundException('Assignment not found');
         }
-        if (assignment.program.coachId !== coachId) {
-            throw new common_1.ForbiddenException('Only the coach can remove assignments');
+        if (assignment.program.coachId !== coachId && assignment.studentId !== coachId) {
+            throw new common_1.ForbiddenException('You do not have permission to remove this assignment');
         }
         const result = await this.prisma.programAssignment.delete({ where: { id: assignmentId } });
         await this.auditService.logChange(assignment.programId, coachId, 'unassign', { studentId: assignment.studentId, assignmentId });
@@ -384,6 +404,76 @@ let ProgramService = class ProgramService {
             throw new common_1.ForbiddenException('Only the coach can view audit logs');
         }
         return this.auditService.getAuditLog(programId);
+    }
+    async getAssignmentsForStudent(studentId) {
+        const assignments = await this.prisma.programAssignment.findMany({
+            where: { studentId },
+            include: {
+                program: {
+                    select: {
+                        id: true,
+                        title: true,
+                        description: true,
+                        coachId: true,
+                    },
+                },
+                assigner: {
+                    select: {
+                        id: true,
+                        pseudo: true,
+                        firstName: true,
+                        lastName: true,
+                    },
+                },
+            },
+            orderBy: { assignedAt: 'desc' },
+        });
+        return assignments;
+    }
+    async getMyAssignmentsWithDetails(studentId) {
+        const assignments = await this.prisma.programAssignment.findMany({
+            where: { studentId },
+            include: {
+                program: {
+                    include: {
+                        blocks: {
+                            include: {
+                                weeks: {
+                                    include: {
+                                        sessions: {
+                                            include: {
+                                                exercises: {
+                                                    include: {
+                                                        exercise: {
+                                                            select: {
+                                                                id: true,
+                                                                name: true,
+                                                                description: true,
+                                                                type: true,
+                                                            },
+                                                        },
+                                                    },
+                                                },
+                                            },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                        coach: {
+                            select: {
+                                id: true,
+                                pseudo: true,
+                                firstName: true,
+                                lastName: true,
+                            },
+                        },
+                    },
+                },
+            },
+            orderBy: { assignedAt: 'desc' },
+        });
+        return assignments;
     }
 };
 exports.ProgramService = ProgramService;

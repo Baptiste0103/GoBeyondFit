@@ -39,9 +39,6 @@ let WorkoutService = class WorkoutService {
                 exercises: {
                     include: {
                         exercise: true,
-                        progressInstances: {
-                            where: { studentId },
-                        },
                     },
                 },
                 progress: {
@@ -74,11 +71,6 @@ let WorkoutService = class WorkoutService {
                 exercises: {
                     include: {
                         exercise: true,
-                        progressInstances: {
-                            where: { studentId },
-                            orderBy: { savedAt: 'desc' },
-                            take: 1,
-                        },
                     },
                     orderBy: { position: 'asc' },
                 },
@@ -101,38 +93,22 @@ let WorkoutService = class WorkoutService {
                 studentId,
             },
         });
-        if (sessionProgress && sessionProgress.exerciseInstanceId !== exerciseInstanceId) {
-            return this.prisma.sessionProgress.update({
-                where: { id: sessionProgress.id },
+        if (!sessionProgress) {
+            return this.prisma.sessionProgress.create({
                 data: {
-                    exerciseInstanceId,
+                    sessionId,
+                    studentId,
                     progress: data.progress,
                     notes: data.notes,
-                    savedAt: new Date(),
-                },
-                include: {
-                    exerciseInstance: {
-                        include: {
-                            exercise: true,
-                        },
-                    },
                 },
             });
         }
-        return this.prisma.sessionProgress.create({
+        return this.prisma.sessionProgress.update({
+            where: { id: sessionProgress.id },
             data: {
-                sessionId,
-                exerciseInstanceId,
-                studentId,
                 progress: data.progress,
                 notes: data.notes,
-            },
-            include: {
-                exerciseInstance: {
-                    include: {
-                        exercise: true,
-                    },
-                },
+                updatedAt: new Date(),
             },
         });
     }

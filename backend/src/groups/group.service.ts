@@ -12,6 +12,15 @@ export class GroupService {
   constructor(private prisma: PrismaService) {}
 
   async create(createGroupDto: CreateGroupDto, userId: string) {
+    // Verify user is a coach
+    const user = await this.prisma.user.findUnique({ where: { id: userId } })
+    if (!user) {
+      throw new NotFoundException('User not found')
+    }
+    if (user.role !== 'coach' && user.role !== 'admin') {
+      throw new ForbiddenException('Only coaches can create groups')
+    }
+
     return this.prisma.group.create({
       data: {
         ...createGroupDto,

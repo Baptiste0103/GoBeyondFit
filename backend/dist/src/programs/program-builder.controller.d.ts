@@ -48,7 +48,50 @@ export declare class ProgramBuilderController {
         title: string;
         description: string | null;
         isDraft: boolean;
-        blocks: string | number | true | import("@prisma/client/runtime/library").JsonObject | import("@prisma/client/runtime/library").JsonArray;
+        blocks: ({
+            weeks: ({
+                sessions: ({
+                    exercises: ({
+                        exercise: {
+                            type: import(".prisma/client").$Enums.ExerciseType;
+                            name: string;
+                            id: string;
+                            createdAt: Date;
+                            updatedAt: Date;
+                            description: string | null;
+                            meta: import("@prisma/client/runtime/library").JsonValue | null;
+                            scope: import(".prisma/client").$Enums.Scope;
+                            ownerId: string | null;
+                        };
+                    } & {
+                        id: string;
+                        exerciseId: string;
+                        position: number;
+                        config: import("@prisma/client/runtime/library").JsonValue | null;
+                        sessionId: string;
+                    })[];
+                } & {
+                    id: string;
+                    data: import("@prisma/client/runtime/library").JsonValue | null;
+                    title: string | null;
+                    position: number;
+                    notes: string | null;
+                    date: Date | null;
+                    weekId: string;
+                })[];
+            } & {
+                id: string;
+                position: number;
+                weekNumber: number;
+                blockId: string;
+            })[];
+        } & {
+            id: string;
+            title: string | null;
+            position: number;
+            notes: string | null;
+            programId: string;
+        })[];
         ownerId: string | null;
         coachId: string;
         createdAt: Date;
@@ -60,6 +103,51 @@ export declare class ProgramBuilderController {
         blocks: any[];
         isDraft?: boolean;
     }, req: any): Promise<{
+        blocks: ({
+            weeks: ({
+                sessions: ({
+                    exercises: ({
+                        exercise: {
+                            type: import(".prisma/client").$Enums.ExerciseType;
+                            name: string;
+                            id: string;
+                            createdAt: Date;
+                            updatedAt: Date;
+                            description: string | null;
+                            meta: import("@prisma/client/runtime/library").JsonValue | null;
+                            scope: import(".prisma/client").$Enums.Scope;
+                            ownerId: string | null;
+                        };
+                    } & {
+                        id: string;
+                        exerciseId: string;
+                        position: number;
+                        config: import("@prisma/client/runtime/library").JsonValue | null;
+                        sessionId: string;
+                    })[];
+                } & {
+                    id: string;
+                    data: import("@prisma/client/runtime/library").JsonValue | null;
+                    title: string | null;
+                    position: number;
+                    notes: string | null;
+                    date: Date | null;
+                    weekId: string;
+                })[];
+            } & {
+                id: string;
+                position: number;
+                weekNumber: number;
+                blockId: string;
+            })[];
+        } & {
+            id: string;
+            title: string | null;
+            position: number;
+            notes: string | null;
+            programId: string;
+        })[];
+    } & {
         id: string;
         coachId: string;
         createdAt: Date;

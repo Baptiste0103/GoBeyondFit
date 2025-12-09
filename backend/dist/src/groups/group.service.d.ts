@@ -200,4 +200,23 @@ export declare class GroupService {
         roleInGroup: string;
         joinedAt: Date;
     }>;
+    getGroupMembers(groupId: string, userId: string): Promise<({
+        user: {
+            email: string;
+            pseudo: string;
+            firstName: string | null;
+            lastName: string | null;
+            id: string;
+        };
+    } & {
+        id: string;
+        userId: string;
+        groupId: string;
+        roleInGroup: string;
+        joinedAt: Date;
+    })[]>;
+    leaveGroup(groupId: string, userId: string): Promise<{
+        success: boolean;
+        message: string;
+    }>;
 }

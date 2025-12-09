@@ -35,6 +35,39 @@ let UsersService = class UsersService {
         }
         return user;
     }
+    async findByPseudoOrNull(pseudo) {
+        const user = await this.prisma.user.findFirst({
+            where: { pseudo: { equals: pseudo, mode: 'insensitive' } },
+            select: {
+                id: true,
+                email: true,
+                pseudo: true,
+                firstName: true,
+                lastName: true,
+                role: true,
+                profileUrl: true,
+            },
+        });
+        return user;
+    }
+    async findByPseudo(pseudo) {
+        const user = await this.prisma.user.findFirst({
+            where: { pseudo: { equals: pseudo, mode: 'insensitive' } },
+            select: {
+                id: true,
+                email: true,
+                pseudo: true,
+                firstName: true,
+                lastName: true,
+                role: true,
+                profileUrl: true,
+            },
+        });
+        if (!user) {
+            throw new common_1.NotFoundException(`User with pseudo ${pseudo} not found`);
+        }
+        return user;
+    }
     async findById(id) {
         const user = await this.prisma.user.findUnique({
             where: { id },

@@ -20,11 +20,24 @@ let UsersController = class UsersController {
     constructor(usersService) {
         this.usersService = usersService;
     }
-    async searchByEmail(email) {
-        if (!email || !email.trim()) {
-            throw new common_1.BadRequestException('Email is required');
+    async searchByEmail(email, pseudo) {
+        if (pseudo && pseudo.trim()) {
+            const user = await this.usersService.findByPseudoOrNull(pseudo.trim());
+            if (!user) {
+                return { found: false, data: null };
+            }
+            return { found: true, data: user };
         }
-        return this.usersService.findByEmail(email.trim());
+        if (email && email.trim()) {
+            try {
+                const user = await this.usersService.findByEmail(email.trim());
+                return { found: true, data: user };
+            }
+            catch (error) {
+                return { found: false, data: null };
+            }
+        }
+        throw new common_1.BadRequestException('Either email or pseudo is required');
     }
 };
 exports.UsersController = UsersController;
@@ -32,8 +45,9 @@ __decorate([
     (0, common_1.Get)('users'),
     (0, common_1.HttpCode)(common_1.HttpStatus.OK),
     __param(0, (0, common_1.Query)('email')),
+    __param(1, (0, common_1.Query)('pseudo')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
+    __metadata("design:paramtypes", [String, String]),
     __metadata("design:returntype", Promise)
 ], UsersController.prototype, "searchByEmail", null);
 exports.UsersController = UsersController = __decorate([

@@ -111,17 +111,10 @@ let SessionService = class SessionService {
         if (!assignment) {
             throw new common_1.ForbiddenException('Access denied to this session');
         }
-        const exerciseInstance = await this.prisma.sessionExercise.findUnique({
-            where: { id: progressData.exerciseInstanceId },
-        });
-        if (!exerciseInstance || exerciseInstance.sessionId !== sessionId) {
-            throw new common_1.BadRequestException('Invalid exercise instance for this session');
-        }
         let existingProgress = await this.prisma.sessionProgress.findFirst({
             where: {
                 sessionId,
                 studentId,
-                exerciseInstanceId: progressData.exerciseInstanceId,
             },
         });
         if (existingProgress) {
@@ -131,6 +124,7 @@ let SessionService = class SessionService {
                     progress: progressData.progress,
                     notes: progressData.notes,
                     videos: progressData.videos || [],
+                    updatedAt: new Date(),
                 },
             });
         }
@@ -139,7 +133,6 @@ let SessionService = class SessionService {
                 data: {
                     sessionId,
                     studentId,
-                    exerciseInstanceId: progressData.exerciseInstanceId,
                     progress: progressData.progress,
                     notes: progressData.notes,
                     videos: progressData.videos || [],
@@ -166,7 +159,6 @@ let SessionService = class SessionService {
         }
         return this.prisma.sessionProgress.findMany({
             where: { sessionId, studentId },
-            include: { exerciseInstance: { include: { exercise: true } } },
         });
     }
     async addExerciseToSession(sessionId, exerciseId, coachId, config) {

@@ -39,6 +39,9 @@ let ProgramController = class ProgramController {
         }
         return this.programService.findAll();
     }
+    async getMyAssignments(req) {
+        return this.programService.getMyAssignmentsWithDetails(req.user.id);
+    }
     async findByCoach(coachId) {
         return this.programService.findByCoach(coachId);
     }
@@ -60,8 +63,8 @@ let ProgramController = class ProgramController {
     async delete(id, req) {
         return this.programService.delete(id, req.user.id);
     }
-    async assignToStudent(programId, studentId, req) {
-        return this.programService.assignToStudent(programId, studentId, req.user.id);
+    async assignToStudent(programId, studentId, body, req) {
+        return this.programService.assignToStudent(programId, studentId, req.user.id, body?.groupId);
     }
     async removeAssignment(assignmentId, req) {
         return this.programService.removeAssignment(assignmentId, req.user.id);
@@ -98,6 +101,19 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], ProgramController.prototype, "findAll", null);
+__decorate([
+    (0, common_1.Get)('my-assignments'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, swagger_1.ApiOperation)({ summary: 'Get my assigned programs (for current user)' }),
+    (0, swagger_1.ApiResponse)({
+        status: common_1.HttpStatus.OK,
+        description: 'List of my assigned programs',
+    }),
+    __param(0, (0, common_1.Request)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], ProgramController.prototype, "getMyAssignments", null);
 __decorate([
     (0, common_1.Get)('coach/:coachId'),
     (0, swagger_1.ApiOperation)({ summary: "Get programs created by a coach" }),
@@ -199,15 +215,15 @@ __decorate([
     }),
     __param(0, (0, common_1.Param)('programId')),
     __param(1, (0, common_1.Param)('studentId')),
-    __param(2, (0, common_1.Request)()),
+    __param(2, (0, common_1.Body)()),
+    __param(3, (0, common_1.Request)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String, Object]),
+    __metadata("design:paramtypes", [String, String, Object, Object]),
     __metadata("design:returntype", Promise)
 ], ProgramController.prototype, "assignToStudent", null);
 __decorate([
     (0, common_1.Delete)(':assignmentId/assignment'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
-    (0, roles_guard_1.Roles)(roles_guard_1.UserRole.COACH, roles_guard_1.UserRole.ADMIN),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, swagger_1.ApiOperation)({ summary: 'Remove program assignment' }),
     (0, swagger_1.ApiResponse)({
         status: common_1.HttpStatus.OK,

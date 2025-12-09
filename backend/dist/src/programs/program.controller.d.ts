@@ -199,6 +199,71 @@ export declare class ProgramController {
         title: string;
         isDraft: boolean;
     })[]>;
+    getMyAssignments(req: any): Promise<({
+        program: {
+            coach: {
+                pseudo: string;
+                firstName: string | null;
+                lastName: string | null;
+                id: string;
+            };
+            blocks: ({
+                weeks: ({
+                    sessions: ({
+                        exercises: ({
+                            exercise: {
+                                type: import(".prisma/client").$Enums.ExerciseType;
+                                name: string;
+                                id: string;
+                                description: string | null;
+                            };
+                        } & {
+                            id: string;
+                            exerciseId: string;
+                            position: number;
+                            config: import("@prisma/client/runtime/library").JsonValue | null;
+                            sessionId: string;
+                        })[];
+                    } & {
+                        id: string;
+                        data: import("@prisma/client/runtime/library").JsonValue | null;
+                        title: string | null;
+                        position: number;
+                        notes: string | null;
+                        date: Date | null;
+                        weekId: string;
+                    })[];
+                } & {
+                    id: string;
+                    position: number;
+                    weekNumber: number;
+                    blockId: string;
+                })[];
+            } & {
+                id: string;
+                title: string | null;
+                position: number;
+                notes: string | null;
+                programId: string;
+            })[];
+        } & {
+            id: string;
+            coachId: string;
+            createdAt: Date;
+            updatedAt: Date;
+            data: import("@prisma/client/runtime/library").JsonValue | null;
+            description: string | null;
+            ownerId: string | null;
+            title: string;
+            isDraft: boolean;
+        };
+    } & {
+        id: string;
+        assignedBy: string | null;
+        programId: string;
+        studentId: string;
+        assignedAt: Date;
+    })[]>;
     findByCoach(coachId: string): Promise<({
         blocks: ({
             weeks: ({
@@ -463,7 +528,9 @@ export declare class ProgramController {
         title: string;
         isDraft: boolean;
     }>;
-    assignToStudent(programId: string, studentId: string, req: any): Promise<{
+    assignToStudent(programId: string, studentId: string, body?: {
+        groupId?: string;
+    }, req?: any): Promise<{
         id: string;
         assignedBy: string | null;
         programId: string;

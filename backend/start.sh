@@ -2,7 +2,7 @@
 
 # Push database schema (creates database and tables)
 echo "Pushing Prisma schema to database..."
-npx prisma db push --skip-generate
+npx prisma db push --skip-generate --accept-data-loss
 
 # Start the application
 echo "Starting application..."

@@ -200,4 +200,23 @@ export declare class GroupController {
         roleInGroup: string;
         joinedAt: Date;
     }>;
+    getGroupMembers(groupId: string, req: any): Promise<({
+        user: {
+            email: string;
+            pseudo: string;
+            firstName: string | null;
+            lastName: string | null;
+            id: string;
+        };
+    } & {
+        id: string;
+        userId: string;
+        groupId: string;
+        roleInGroup: string;
+        joinedAt: Date;
+    })[]>;
+    leaveGroup(groupId: string, req: any): Promise<{
+        success: boolean;
+        message: string;
+    }>;
 }

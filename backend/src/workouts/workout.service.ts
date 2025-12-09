@@ -31,9 +31,6 @@ export class WorkoutService {
         exercises: {
           include: {
             exercise: true,
-            progressInstances: {
-              where: { studentId },
-            },
           },
         },
         progress: {
@@ -70,11 +67,6 @@ export class WorkoutService {
         exercises: {
           include: {
             exercise: true,
-            progressInstances: {
-              where: { studentId },
-              orderBy: { savedAt: 'desc' },
-              take: 1,
-            },
           },
           orderBy: { position: 'asc' },
         },
@@ -94,7 +86,8 @@ export class WorkoutService {
   }
 
   /**
-   * Create or update session progress for an exercise
+   * LEGACY: Create or update session progress for an exercise
+   * This method is deprecated - use WorkoutRunnerService instead
    */
   async saveExerciseProgress(
     sessionId: string,
@@ -102,6 +95,7 @@ export class WorkoutService {
     studentId: string,
     data: UpdateSessionProgressDto,
   ) {
+    // Fetch the existing session progress
     const sessionProgress = await this.prisma.sessionProgress.findFirst({
       where: {
         sessionId,
@@ -109,41 +103,25 @@ export class WorkoutService {
       },
     });
 
-    if (sessionProgress && sessionProgress.exerciseInstanceId !== exerciseInstanceId) {
-      // Update existing session progress for new exercise
-      return this.prisma.sessionProgress.update({
-        where: { id: sessionProgress.id },
+    if (!sessionProgress) {
+      // Create new progress record
+      return this.prisma.sessionProgress.create({
         data: {
-          exerciseInstanceId,
+          sessionId,
+          studentId,
           progress: data.progress,
           notes: data.notes,
-          savedAt: new Date(),
-        },
-        include: {
-          exerciseInstance: {
-            include: {
-              exercise: true,
-            },
-          },
         },
       });
     }
 
-    // Create new progress record
-    return this.prisma.sessionProgress.create({
+    // Update existing progress record
+    return this.prisma.sessionProgress.update({
+      where: { id: sessionProgress.id },
       data: {
-        sessionId,
-        exerciseInstanceId,
-        studentId,
         progress: data.progress,
         notes: data.notes,
-      },
-      include: {
-        exerciseInstance: {
-          include: {
-            exercise: true,
-          },
-        },
+        updatedAt: new Date(),
       },
     });
   }

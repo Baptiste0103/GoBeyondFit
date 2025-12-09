@@ -18,6 +18,7 @@ const exercise_module_1 = require("./exercises/exercise.module");
 const group_module_1 = require("./groups/group.module");
 const program_module_1 = require("./programs/program.module");
 const session_module_1 = require("./sessions/session.module");
+const session_progress_module_1 = require("./session-progress/session-progress.module");
 const workout_module_1 = require("./workouts/workout.module");
 const common_module_1 = require("./common/common.module");
 const invitation_module_1 = require("./invitations/invitation.module");
@@ -26,6 +27,7 @@ const favorites_module_1 = require("./favorites/favorites.module");
 const history_module_1 = require("./history/history.module");
 const badge_module_1 = require("./badges/badge.module");
 const stats_module_1 = require("./stats/stats.module");
+const storage_module_1 = require("./storage/storage.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -48,10 +50,12 @@ exports.AppModule = AppModule = __decorate([
             group_module_1.GroupModule,
             program_module_1.ProgramModule,
             session_module_1.SessionModule,
+            session_progress_module_1.SessionProgressModule,
             workout_module_1.WorkoutModule,
             badge_module_1.BadgeModule,
             stats_module_1.StatsModule,
             invitation_module_1.InvitationModule,
+            storage_module_1.StorageModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [app_service_1.AppService],

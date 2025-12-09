@@ -165,51 +165,31 @@ let ExerciseService = class ExerciseService {
     async searchLibrary(options) {
         const { search, difficulty, muscleGroup, page, limit, userId } = options;
         const skip = (page - 1) * limit;
-        const where = {
-            OR: [
-                { scope: 'global' },
-                { ownerId: userId },
-            ],
-        };
+        console.log('[searchLibrary] Called with limit:', limit);
+        const escapedUserId = userId.replace(/'/g, "''");
+        let whereClause = `(scope = 'global' OR "ownerId" = '${escapedUserId}')`;
         if (search && search.trim()) {
-            where.AND = where.AND || [];
-            where.AND.push({
-                OR: [
-                    { name: { contains: search, mode: 'insensitive' } },
-                    { description: { contains: search, mode: 'insensitive' } },
-                ],
-            });
+            const escapedSearch = search.trim().replace(/'/g, "''");
+            whereClause += ` AND (name ILIKE '%${escapedSearch}%' OR description ILIKE '%${escapedSearch}%')`;
         }
         if (difficulty) {
-            where.AND = where.AND || [];
-            where.AND.push({
-                meta: {
-                    path: ['difficultyLevel'],
-                    equals: difficulty,
-                },
-            });
+            const escapedDifficulty = difficulty.replace(/'/g, "''");
+            whereClause += ` AND (meta->>'difficulty_level' = '${escapedDifficulty}' OR meta->>'difficultyLevel' = '${escapedDifficulty}')`;
         }
         if (muscleGroup) {
-            where.AND = where.AND || [];
-            where.AND.push({
-                meta: {
-                    path: ['targetMuscleGroup'],
-                    equals: muscleGroup,
-                },
-            });
+            const escapedMuscleGroup = muscleGroup.replace(/'/g, "''");
+            whereClause += ` AND (meta->>'target_muscle_group' = '${escapedMuscleGroup}' OR meta->>'targetMuscleGroup' = '${escapedMuscleGroup}')`;
         }
-        const total = await this.prisma.exercise.count({ where });
-        const exercises = await this.prisma.exercise.findMany({
-            where,
-            include: {
-                owner: {
-                    select: { id: true, pseudo: true, firstName: true, lastName: true },
-                },
-            },
-            orderBy: { createdAt: 'desc' },
-            skip,
-            take: limit,
-        });
+        console.log('[searchLibrary] WHERE clause:', whereClause.substring(0, 100));
+        console.log('[searchLibrary] LIMIT:', limit, 'OFFSET:', skip);
+        const countQuery = `SELECT COUNT(*) as count FROM exercises WHERE ${whereClause}`;
+        const countResult = await this.prisma.$queryRawUnsafe(countQuery);
+        const total = parseInt(countResult[0].count, 10);
+        console.log('[searchLibrary] Total count:', total);
+        const dataQuery = `SELECT * FROM exercises WHERE ${whereClause} ORDER BY "createdAt" DESC LIMIT $1 OFFSET $2`;
+        console.log('[searchLibrary] Running query with LIMIT', limit, 'OFFSET', skip);
+        const exercises = await this.prisma.$queryRawUnsafe(dataQuery, limit, skip);
+        console.log('[searchLibrary] Exercises returned:', exercises.length);
         return {
             data: exercises,
             pagination: {

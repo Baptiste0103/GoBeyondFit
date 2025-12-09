@@ -484,6 +484,29 @@ export class ProgramService {
         studentId,
         assignedBy: coachId,
       },
+      include: {
+        program: true,
+      }
+    });
+
+    // Get the coach's pseudo for the notification
+    const coach = await this.prisma.user.findUnique({
+      where: { id: coachId },
+      select: { pseudo: true }
+    });
+
+    // Create a notification for the student
+    await this.prisma.notification.create({
+      data: {
+        userId: studentId,
+        type: 'assignment',
+        payload: {
+          assignmentId: assignment.id,
+          programTitle: assignment.program.title,
+          coachPseudo: coach?.pseudo || 'Coach',
+          assignedAt: new Date().toISOString(),
+        }
+      }
     });
 
     // Log assignment to audit
@@ -510,8 +533,9 @@ export class ProgramService {
       throw new NotFoundException('Assignment not found');
     }
 
-    if (assignment.program.coachId !== coachId) {
-      throw new ForbiddenException('Only the coach can remove assignments');
+    // Allow both coach (who assigned it) and student (assigned) to remove
+    if (assignment.program.coachId !== coachId && assignment.studentId !== coachId) {
+      throw new ForbiddenException('You do not have permission to remove this assignment');
     }
 
     const result = await this.prisma.programAssignment.delete({ where: { id: assignmentId } });
@@ -566,6 +590,56 @@ export class ProgramService {
             pseudo: true,
             firstName: true,
             lastName: true,
+          },
+        },
+      },
+      orderBy: { assignedAt: 'desc' },
+    });
+
+    return assignments;
+  }
+
+  /**
+   * Get my assignments with full program structure (for current user)
+   */
+  async getMyAssignmentsWithDetails(studentId: string) {
+    const assignments = await this.prisma.programAssignment.findMany({
+      where: { studentId },
+      include: {
+        program: {
+          include: {
+            blocks: {
+              include: {
+                weeks: {
+                  include: {
+                    sessions: {
+                      include: {
+                        exercises: {
+                          include: {
+                            exercise: {
+                              select: {
+                                id: true,
+                                name: true,
+                                description: true,
+                                type: true,
+                              },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            coach: {
+              select: {
+                id: true,
+                pseudo: true,
+                firstName: true,
+                lastName: true,
+              },
+            },
           },
         },
       },

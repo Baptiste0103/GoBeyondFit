@@ -9,6 +9,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.StorageModule = void 0;
 const common_1 = require("@nestjs/common");
 const storage_simple_service_1 = require("./storage-simple.service");
+const video_compression_service_1 = require("./video-compression.service");
+const exercise_media_service_1 = require("./exercise-media.service");
+const storage_controller_1 = require("./storage.controller");
 const prisma_module_1 = require("../prisma/prisma.module");
 let StorageModule = class StorageModule {
 };
@@ -16,8 +19,9 @@ exports.StorageModule = StorageModule;
 exports.StorageModule = StorageModule = __decorate([
     (0, common_1.Module)({
         imports: [prisma_module_1.PrismaModule],
-        providers: [storage_simple_service_1.StorageService],
-        exports: [storage_simple_service_1.StorageService],
+        controllers: [storage_controller_1.StorageController],
+        providers: [storage_simple_service_1.StorageService, video_compression_service_1.VideoCompressionService, exercise_media_service_1.ExerciseMediaService],
+        exports: [storage_simple_service_1.StorageService, video_compression_service_1.VideoCompressionService, exercise_media_service_1.ExerciseMediaService],
     })
 ], StorageModule);
 //# sourceMappingURL=storage.module.js.map

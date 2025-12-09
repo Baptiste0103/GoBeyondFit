@@ -67,6 +67,17 @@ export class ProgramController {
     return this.programService.findAll();
   }
 
+  @Get('my-assignments')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Get my assigned programs (for current user)' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'List of my assigned programs',
+  })
+  async getMyAssignments(@Request() req: any) {
+    return this.programService.getMyAssignmentsWithDetails(req.user.id);
+  }
+
   @Get('coach/:coachId')
   @ApiOperation({ summary: "Get programs created by a coach" })
   @ApiResponse({
@@ -165,8 +176,7 @@ export class ProgramController {
   }
 
   @Delete(':assignmentId/assignment')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.COACH, UserRole.ADMIN)
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Remove program assignment' })
   @ApiResponse({
     status: HttpStatus.OK,
@@ -174,16 +184,5 @@ export class ProgramController {
   })
   async removeAssignment(@Param('assignmentId') assignmentId: string, @Request() req: any) {
     return this.programService.removeAssignment(assignmentId, req.user.id);
-  }
-
-  @Get('assignments/me')
-  @UseGuards(JwtAuthGuard)
-  @ApiOperation({ summary: 'Get assignments received by current student' })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: 'List of program assignments',
-  })
-  async getMyAssignments(@Request() req: any) {
-    return this.programService.getAssignmentsForStudent(req.user.id);
   }
 }
