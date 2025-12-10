@@ -376,6 +376,25 @@ let ProgramService = class ProgramService {
                 studentId,
                 assignedBy: coachId,
             },
+            include: {
+                program: true,
+            }
+        });
+        const coach = await this.prisma.user.findUnique({
+            where: { id: coachId },
+            select: { pseudo: true }
+        });
+        await this.prisma.notification.create({
+            data: {
+                userId: studentId,
+                type: 'assignment',
+                payload: {
+                    assignmentId: assignment.id,
+                    programTitle: assignment.program.title,
+                    coachPseudo: coach?.pseudo || 'Coach',
+                    assignedAt: new Date().toISOString(),
+                }
+            }
         });
         await this.auditService.logChange(programId, coachId, 'assign', { studentId, assignmentId: assignment.id });
         return assignment;

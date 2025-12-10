@@ -56,6 +56,11 @@ quick_start.ps1
 quick_start.sh
 DOCKER_COMMANDS.sh
 
+# Files that must remain in the build context
+!backend/start.sh
+!frontend/start.sh
+!frontend/.env.local
+
 # Data and temp files
 *.xlsx
 *.csv

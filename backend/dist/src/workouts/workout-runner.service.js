@@ -144,17 +144,8 @@ let WorkoutRunnerService = class WorkoutRunnerService {
         }
         const hasProgress = sessionProgress.progress &&
             sessionProgress.progress.exercises?.some((ex) => ex.data && Object.keys(ex.data).some(k => ex.data[k] !== null && ex.data[k] !== 0 && ex.data[k] !== ''));
-        const latestWorkout = await this.prisma.workoutSession.findFirst({
-            where: {
-                userId,
-                sessionId,
-            },
-            orderBy: { startedAt: 'desc' },
-            take: 1,
-        });
         return {
             exists: true,
-            workoutId: latestWorkout?.id,
             hasProgress: hasProgress || false,
             status: hasProgress ? 'in_progress' : 'started',
             message: hasProgress ? 'Modifier' : 'Commencer',
@@ -409,38 +400,6 @@ let WorkoutRunnerService = class WorkoutRunnerService {
                 updatedAt: new Date(),
             },
         });
-        const existingLog = await this.prisma.exerciseLog.findFirst({
-            where: {
-                sessionId: workoutId,
-                exerciseId: sessionExercise.exerciseId,
-            },
-        });
-        if (existingLog) {
-            await this.prisma.exerciseLog.update({
-                where: { id: existingLog.id },
-                data: {
-                    setsCompleted: data.setsCompleted || existingLog.setsCompleted,
-                    reps: data.repsCompleted || existingLog.reps,
-                    weight: data.weight || existingLog.weight,
-                    notes: data.notes || existingLog.notes,
-                    completedAt: new Date(),
-                },
-            });
-        }
-        else {
-            await this.prisma.exerciseLog.create({
-                data: {
-                    sessionId: workoutId,
-                    exerciseId: sessionExercise.exerciseId,
-                    userId,
-                    setsCompleted: data.setsCompleted,
-                    reps: data.repsCompleted,
-                    weight: data.weight,
-                    notes: data.notes,
-                    completedAt: new Date(),
-                },
-            });
-        }
         console.log(`🟢 [saveExerciseData] SessionProgress updated: ${updatedSessionProgress.id}`);
         return {
             sessionProgressId: updatedSessionProgress.id,
@@ -554,10 +513,25 @@ let WorkoutRunnerService = class WorkoutRunnerService {
         return { message: 'Exercise skipped' };
     }
     async getUserWorkoutHistory(userId, limit = 20) {
-        return this.prisma.workoutSession.findMany({
-            where: { userId, endedAt: { not: null } },
-            orderBy: { endedAt: 'desc' },
+        return this.prisma.sessionProgress.findMany({
+            where: { studentId: userId, status: 'completed' },
+            orderBy: { updatedAt: 'desc' },
             take: limit,
+            include: {
+                session: {
+                    include: {
+                        week: {
+                            include: {
+                                block: {
+                                    include: {
+                                        program: true,
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
         });
     }
     async getSessionProgress(userId, sessionId) {
@@ -668,38 +642,53 @@ let WorkoutRunnerService = class WorkoutRunnerService {
         }
     }
     async getCurrentSession(userId) {
-        let session = await this.prisma.workoutSession.findFirst({
+        const session = await this.prisma.sessionProgress.findFirst({
             where: {
-                userId,
-                endedAt: null,
+                studentId: userId,
+                status: { not: 'completed' },
             },
-            orderBy: { startedAt: 'desc' },
+            orderBy: { updatedAt: 'desc' },
+            include: {
+                session: {
+                    include: {
+                        week: {
+                            include: {
+                                block: {
+                                    include: {
+                                        program: true,
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
         });
         return session || null;
     }
     async getWorkoutStats(userId) {
-        const workouts = await this.prisma.workoutSession.findMany({
-            where: { userId, endedAt: { not: null } },
+        const completedSessions = await this.prisma.sessionProgress.findMany({
+            where: { studentId: userId, status: 'completed' },
         });
-        const completedExercises = await this.prisma.exerciseLog.aggregate({
-            where: { userId, skipped: false },
-            _sum: { setsCompleted: true },
-            _count: true,
-        });
-        const totalWorkoutTime = workouts.reduce((sum, w) => {
-            if (w.endedAt && (w.startTime || w.startedAt)) {
-                const startT = w.startTime || w.startedAt;
-                return sum + (w.endedAt.getTime() - startT.getTime()) / 1000 / 60;
-            }
-            return sum;
-        }, 0);
+        let totalSetsCompleted = 0;
+        let totalExercisesCompleted = 0;
+        for (const sp of completedSessions) {
+            const progressData = sp.progress || {};
+            const exercises = progressData.exercises || [];
+            exercises.forEach((ex) => {
+                if (ex.status === 'completed') {
+                    totalExercisesCompleted++;
+                    if (ex.data?.setsCompleted) {
+                        totalSetsCompleted += ex.data.setsCompleted;
+                    }
+                }
+            });
+        }
         return {
-            totalWorkouts: workouts.length,
-            totalExercisesCompleted: completedExercises._count,
-            totalSetsCompleted: completedExercises._sum.setsCompleted || 0,
-            totalWorkoutMinutes: Math.round(totalWorkoutTime),
-            averageWorkoutDuration: workouts.length > 0 ? Math.round(totalWorkoutTime / workouts.length) : 0,
-            lastWorkout: workouts[0]?.endedAt || null,
+            totalWorkouts: completedSessions.length,
+            totalExercisesCompleted,
+            totalSetsCompleted,
+            lastWorkout: completedSessions[0]?.updatedAt || null,
         };
     }
 };

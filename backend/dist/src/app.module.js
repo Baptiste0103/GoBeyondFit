@@ -28,6 +28,8 @@ const history_module_1 = require("./history/history.module");
 const badge_module_1 = require("./badges/badge.module");
 const stats_module_1 = require("./stats/stats.module");
 const storage_module_1 = require("./storage/storage.module");
+const notifications_module_1 = require("./notifications/notifications.module");
+const export_module_1 = require("./export/export.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -56,6 +58,8 @@ exports.AppModule = AppModule = __decorate([
             stats_module_1.StatsModule,
             invitation_module_1.InvitationModule,
             storage_module_1.StorageModule,
+            notifications_module_1.NotificationsModule,
+            export_module_1.ExportModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [app_service_1.AppService],

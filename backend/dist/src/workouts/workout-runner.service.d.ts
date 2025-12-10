@@ -18,12 +18,10 @@ export declare class WorkoutRunnerService {
         exists: boolean;
         status: string;
         message: string;
-        workoutId?: undefined;
         hasProgress?: undefined;
         sessionProgressId?: undefined;
     } | {
         exists: boolean;
-        workoutId: string | undefined;
         hasProgress: any;
         status: string;
         message: string;
@@ -207,24 +205,59 @@ export declare class WorkoutRunnerService {
     skipExercise(userId: string, sessionProgressId: string, exerciseIndex: number, reason?: string): Promise<{
         message: string;
     }>;
-    getUserWorkoutHistory(userId: string, limit?: number): Promise<{
+    getUserWorkoutHistory(userId: string, limit?: number): Promise<({
+        session: {
+            week: {
+                block: {
+                    program: {
+                        id: string;
+                        coachId: string;
+                        createdAt: Date;
+                        updatedAt: Date;
+                        data: import("@prisma/client/runtime/library").JsonValue | null;
+                        description: string | null;
+                        ownerId: string | null;
+                        title: string;
+                        isDraft: boolean;
+                    };
+                } & {
+                    id: string;
+                    title: string | null;
+                    position: number;
+                    notes: string | null;
+                    programId: string;
+                };
+            } & {
+                id: string;
+                position: number;
+                weekNumber: number;
+                blockId: string;
+            };
+        } & {
+            id: string;
+            data: import("@prisma/client/runtime/library").JsonValue | null;
+            title: string | null;
+            position: number;
+            notes: string | null;
+            date: Date | null;
+            weekId: string;
+        };
+    } & {
         id: string;
-        userId: string;
+        updatedAt: Date;
+        sets: number | null;
+        reps: number | null;
         status: string | null;
-        title: string | null;
+        format: string | null;
         notes: string | null;
-        programId: string | null;
-        sessionId: string | null;
-        duration: number | null;
-        totalExercises: number | null;
-        startedAt: Date;
-        startTime: Date | null;
-        endedAt: Date | null;
-        endTime: Date | null;
-        restPeriodSeconds: number | null;
-        formGuidanceEnabled: boolean | null;
-        exercisesCompleted: number | null;
-    }[]>;
+        studentId: string;
+        progress: import("@prisma/client/runtime/library").JsonValue | null;
+        sessionId: string;
+        weight: number | null;
+        exerciseInstanceId: string | null;
+        videos: string[];
+        savedAt: Date;
+    })[]>;
     getSessionProgress(userId: string, sessionId: string): Promise<{
         session: {
             exercises: ({
@@ -360,30 +393,63 @@ export declare class WorkoutRunnerService {
         valid: boolean;
         error?: string;
     };
-    getCurrentSession(userId: string): Promise<{
+    getCurrentSession(userId: string): Promise<({
+        session: {
+            week: {
+                block: {
+                    program: {
+                        id: string;
+                        coachId: string;
+                        createdAt: Date;
+                        updatedAt: Date;
+                        data: import("@prisma/client/runtime/library").JsonValue | null;
+                        description: string | null;
+                        ownerId: string | null;
+                        title: string;
+                        isDraft: boolean;
+                    };
+                } & {
+                    id: string;
+                    title: string | null;
+                    position: number;
+                    notes: string | null;
+                    programId: string;
+                };
+            } & {
+                id: string;
+                position: number;
+                weekNumber: number;
+                blockId: string;
+            };
+        } & {
+            id: string;
+            data: import("@prisma/client/runtime/library").JsonValue | null;
+            title: string | null;
+            position: number;
+            notes: string | null;
+            date: Date | null;
+            weekId: string;
+        };
+    } & {
         id: string;
-        userId: string;
+        updatedAt: Date;
+        sets: number | null;
+        reps: number | null;
         status: string | null;
-        title: string | null;
+        format: string | null;
         notes: string | null;
-        programId: string | null;
-        sessionId: string | null;
-        duration: number | null;
-        totalExercises: number | null;
-        startedAt: Date;
-        startTime: Date | null;
-        endedAt: Date | null;
-        endTime: Date | null;
-        restPeriodSeconds: number | null;
-        formGuidanceEnabled: boolean | null;
-        exercisesCompleted: number | null;
-    } | null>;
+        studentId: string;
+        progress: import("@prisma/client/runtime/library").JsonValue | null;
+        sessionId: string;
+        weight: number | null;
+        exerciseInstanceId: string | null;
+        videos: string[];
+        savedAt: Date;
+    }) | null>;
     getWorkoutStats(userId: string): Promise<{
         totalWorkouts: number;
         totalExercisesCompleted: number;
         totalSetsCompleted: number;
-        totalWorkoutMinutes: number;
-        averageWorkoutDuration: number;
-        lastWorkout: Date | null;
+        lastWorkout: Date;
     }>;
 }

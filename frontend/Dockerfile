@@ -18,6 +18,7 @@ COPY frontend/components ./components
 COPY frontend/public ./public
 COPY frontend/.env.local ./
 COPY frontend/next.config.ts ./
+COPY frontend/tailwind.config.ts ./
 COPY frontend/tsconfig.json ./
 COPY frontend/postcss.config.mjs ./
 COPY frontend/components.json ./

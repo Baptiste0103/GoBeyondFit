@@ -21,6 +21,7 @@ import { BadgeModule } from './badges/badge.module';
 import { StatsModule } from './stats/stats.module';
 import { StorageModule } from './storage/storage.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { ExportModule } from './export/export.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     InvitationModule,
     StorageModule,
     NotificationsModule,
+    ExportModule,
   ],
   controllers: [AppController],
   providers: [AppService],
