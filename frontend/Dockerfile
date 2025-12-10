@@ -34,11 +34,22 @@ WORKDIR /app
 # Install dumb-init for proper signal handling
 RUN apk add --no-cache dumb-init curl
 
-# Copy only necessary files from builder (everything else is compiled in .next)
+# Copy only necessary files from builder
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/package.json ./package.json
+
+# Copy configuration files (needed for path alias resolution)
+COPY --from=builder /app/next.config.ts ./
+COPY --from=builder /app/tsconfig.json ./
+
+# Copy runtime source directories (needed for Next.js route handlers and dynamic imports)
+COPY --from=builder /app/app ./app
+COPY --from=builder /app/lib ./lib
+COPY --from=builder /app/components ./components
+COPY --from=builder /app/hooks ./hooks
+COPY --from=builder /app/providers ./providers
 
 # Copy custom server.js
 COPY frontend/server.js ./server.js
