@@ -6,7 +6,7 @@ import Sidebar from '@/components/sidebar'
 import { authClient } from '@/lib/auth'
 import { Calendar, Play, Clock } from 'lucide-react'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3000'
 
 interface Session {
   id: string

@@ -7,7 +7,7 @@ import { authClient } from '@/lib/auth'
 import { VideoUploader } from '@/components/video-uploader'
 import { Check, ChevronDown, ChevronUp, Trash2, Save } from 'lucide-react'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3000'
 
 interface ExerciseConfig {
   weight?: number

@@ -160,7 +160,7 @@ export default function MyProgramsPage() {
     try {
       const token = authClient.getToken()
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api'}/programs/${assignmentId}/assignment`,
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3000/api'}/programs/${assignmentId}/assignment`,
         {
           method: 'DELETE',
           headers: {

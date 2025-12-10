@@ -1,7 +1,7 @@
 // frontend/lib/auth.ts
 // Client API d'authentification - À utiliser à la place de Supabase
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3000/api';
 
 interface AuthResponse {
   user: {
