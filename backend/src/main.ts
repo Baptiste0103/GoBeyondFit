@@ -23,8 +23,22 @@ async function bootstrap() {
   app.setGlobalPrefix('api');
 
   // Enable CORS for frontend
+  // Accept both localhost and 127.0.0.1
+  const corsOrigin = process.env.CORS_ORIGIN || 'http://localhost:3000';
+  const corsOrigins = Array.isArray(corsOrigin) ? corsOrigin : [corsOrigin];
+  
+  // Add 127.0.0.1 variant if localhost is in the list
+  corsOrigins.forEach((origin: string) => {
+    if (origin.includes('localhost')) {
+      const ipVariant = origin.replace('localhost', '127.0.0.1');
+      if (!corsOrigins.includes(ipVariant)) {
+        corsOrigins.push(ipVariant);
+      }
+    }
+  });
+
   app.enableCors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3001',
+    origin: corsOrigins,
     credentials: true,
   });
 
