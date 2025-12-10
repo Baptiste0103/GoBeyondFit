@@ -40,7 +40,7 @@ services:
       # Server
       NODE_ENV: ${NODE_ENV:-production}
       PORT: 3000
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3001}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
       
       # JWT
       JWT_SECRET: ${JWT_SECRET:-your_jwt_secret_key_change_in_production}
@@ -53,9 +53,9 @@ services:
       SMTP_FROM: ${SMTP_FROM:-noreply@gobeyondfit.com}
       
       # Frontend
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3001}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
       # Optimize Node.js memory
-      NODE_OPTIONS: --max-old-space-size=256
+      NODE_OPTIONS: --max-old-space-size=768
     
     ports:
       - "${BACKEND_PORT:-3000}:3000"
@@ -65,9 +65,9 @@ services:
       - /app/node_modules
     
     # Resource limits
-    mem_limit: 512m
-    memswap_limit: 512m
-    cpus: '1'
+    mem_limit: 1.5g
+    memswap_limit: 1.5g
+    cpus: '2'
     
     networks:
       - gobeyondfit-network
@@ -93,23 +93,19 @@ services:
       PORT: 3001
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3000/api}
       # Optimize Node.js memory
-      NODE_OPTIONS: --max-old-space-size=256
+      NODE_OPTIONS: --max-old-space-size=1024
     
     ports:
       - "${FRONTEND_PORT:-3001}:3001"
     
     volumes:
-      - ./frontend/app:/app/app
-      - ./frontend/lib:/app/lib
-      - ./frontend/components:/app/components
-      - ./frontend/public:/app/public
       - /app/.next
       - /app/node_modules
     
     # Resource limits
-    mem_limit: 512m
-    memswap_limit: 512m
-    cpus: '1'
+    mem_limit: 3g
+    memswap_limit: 3g
+    cpus: '2.5'
     
     networks:
       - gobeyondfit-network

@@ -9,8 +9,8 @@ RUN apk add --no-cache openssl python3 make g++
 # Copy package files
 COPY backend/package*.json ./
 
-# Install dependencies with npm ci (deterministic, faster)
-RUN npm ci --legacy-peer-deps
+# Install dependencies with lock file for reproducible builds
+RUN npm ci
 
 # Copy Prisma schema
 COPY backend/prisma ./prisma
@@ -32,20 +32,20 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# Install runtime dependencies only (dumb-init and openssl)
-RUN apk add --no-cache dumb-init openssl curl
+# Install runtime dependencies (dumb-init, openssl, curl - Puppeteer deps removed, using pdfkit)
+RUN apk add --no-cache \
+    dumb-init \
+    openssl \
+    curl \
+    ca-certificates
 
 # Copy package files
 COPY backend/package*.json ./
 
-# Install production dependencies only
-RUN npm ci --only=production --legacy-peer-deps && \
-    npm cache clean --force
-
 # Copy built application from builder
 COPY --from=builder /app/dist ./dist
 
-# Copy node_modules (includes Prisma client)
+# Copy node_modules (includes all dependencies from builder)
 COPY --from=builder /app/node_modules ./node_modules
 
 # Copy Prisma schema
