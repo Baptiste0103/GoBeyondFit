@@ -1,0 +1,230 @@
+name: E2E Testing
+
+on:
+  pull_request:
+    branches: [master, main, develop]
+  push:
+    branches: [master, main]
+  workflow_dispatch: # Manual trigger
+
+env:
+  NODE_VERSION: '18'
+  POSTGRES_VERSION: '15'
+
+jobs:
+  e2e-tests:
+    name: Run E2E Test Suites
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpassword
+          POSTGRES_DB: gobeyondfit_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Setup test environment variables
+        working-directory: backend
+        run: |
+          cat > .env.test << EOF
+          DATABASE_URL="postgresql://testuser:testpassword@localhost:5432/gobeyondfit_test?schema=public"
+          JWT_SECRET="test-jwt-secret-do-not-use-in-production-12345"
+          NODE_ENV="test"
+          PORT=3001
+          EOF
+
+      - name: Run Prisma migrations
+        working-directory: backend
+        env:
+          DATABASE_URL: "postgresql://testuser:testpassword@localhost:5432/gobeyondfit_test?schema=public"
+        run: |
+          npx prisma generate
+          npx prisma migrate deploy
+
+      - name: Seed test database (optional)
+        working-directory: backend
+        env:
+          DATABASE_URL: "postgresql://testuser:testpassword@localhost:5432/gobeyondfit_test?schema=public"
+        run: |
+          # npx prisma db seed
+          echo "ℹ️  Skipping seed - tests create their own data"
+
+      - name: Run E2E Security Tests
+        id: security-tests
+        working-directory: backend
+        env:
+          DATABASE_URL: "postgresql://testuser:testpassword@localhost:5432/gobeyondfit_test?schema=public"
+          JWT_SECRET: "test-jwt-secret-do-not-use-in-production-12345"
+        run: |
+          echo "🔒 Running Security E2E Tests..."
+          npm run test:e2e -- e2e-security.e2e-spec.ts --forceExit --detectOpenHandles
+        continue-on-error: false
+
+      - name: Run E2E Performance Tests
+        id: performance-tests
+        working-directory: backend
+        env:
+          DATABASE_URL: "postgresql://testuser:testpassword@localhost:5432/gobeyondfit_test?schema=public"
+          JWT_SECRET: "test-jwt-secret-do-not-use-in-production-12345"
+        run: |
+          echo "⚡ Running Performance E2E Tests..."
+          npm run test:e2e -- e2e-performance.e2e-spec.ts --forceExit --detectOpenHandles
+        continue-on-error: false
+
+      - name: Run E2E Workflow Tests
+        id: workflow-tests
+        working-directory: backend
+        env:
+          DATABASE_URL: "postgresql://testuser:testpassword@localhost:5432/gobeyondfit_test?schema=public"
+          JWT_SECRET: "test-jwt-secret-do-not-use-in-production-12345"
+        run: |
+          echo "🔄 Running Workflow E2E Tests..."
+          npm run test:e2e -- e2e-workflow.e2e-spec.ts --forceExit --detectOpenHandles
+        continue-on-error: false
+
+      - name: Run E2E Review Queue Tests
+        id: review-queue-tests
+        working-directory: backend
+        env:
+          DATABASE_URL: "postgresql://testuser:testpassword@localhost:5432/gobeyondfit_test?schema=public"
+          JWT_SECRET: "test-jwt-secret-do-not-use-in-production-12345"
+        run: |
+          echo "📋 Running Review Queue E2E Tests..."
+          npm run test:e2e -- e2e-review-queue.e2e-spec.ts --forceExit --detectOpenHandles
+        continue-on-error: false
+
+      - name: Generate test report
+        if: always()
+        working-directory: backend
+        run: |
+          echo "# E2E Test Results" > test-report.md
+          echo "" >> test-report.md
+          echo "## Test Summary" >> test-report.md
+          echo "- **Security Tests:** ${{ steps.security-tests.outcome }}" >> test-report.md
+          echo "- **Performance Tests:** ${{ steps.performance-tests.outcome }}" >> test-report.md
+          echo "- **Workflow Tests:** ${{ steps.workflow-tests.outcome }}" >> test-report.md
+          echo "- **Review Queue Tests:** ${{ steps.review-queue-tests.outcome }}" >> test-report.md
+          echo "" >> test-report.md
+          echo "## Environment" >> test-report.md
+          echo "- Node.js: ${{ env.NODE_VERSION }}" >> test-report.md
+          echo "- PostgreSQL: ${{ env.POSTGRES_VERSION }}" >> test-report.md
+          echo "- Commit: ${{ github.sha }}" >> test-report.md
+          echo "- Branch: ${{ github.ref }}" >> test-report.md
+          cat test-report.md
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-report
+          path: backend/test-report.md
+          retention-days: 30
+
+      - name: Upload test coverage (if generated)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-coverage
+          path: backend/coverage/
+          retention-days: 30
+
+      - name: Comment test results on PR
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const reportPath = 'backend/test-report.md';
+            let report = '## 🧪 E2E Test Results\n\n';
+            
+            if (fs.existsSync(reportPath)) {
+              report += fs.readFileSync(reportPath, 'utf8');
+            } else {
+              report += 'Test report not found.';
+            }
+            
+            const securityStatus = '${{ steps.security-tests.outcome }}';
+            const perfStatus = '${{ steps.performance-tests.outcome }}';
+            const workflowStatus = '${{ steps.workflow-tests.outcome }}';
+            const reviewStatus = '${{ steps.review-queue-tests.outcome }}';
+            
+            if (securityStatus === 'success' && perfStatus === 'success' && 
+                workflowStatus === 'success' && reviewStatus === 'success') {
+              report += '\n\n✅ **All E2E tests passed!**';
+            } else {
+              report += '\n\n❌ **Some E2E tests failed. Please review the logs.**';
+            }
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: report
+            });
+
+      - name: Fail if any test failed
+        if: |
+          steps.security-tests.outcome != 'success' ||
+          steps.performance-tests.outcome != 'success' ||
+          steps.workflow-tests.outcome != 'success' ||
+          steps.review-queue-tests.outcome != 'success'
+        run: |
+          echo "❌ E2E tests failed!"
+          echo "Security: ${{ steps.security-tests.outcome }}"
+          echo "Performance: ${{ steps.performance-tests.outcome }}"
+          echo "Workflow: ${{ steps.workflow-tests.outcome }}"
+          echo "Review Queue: ${{ steps.review-queue-tests.outcome }}"
+          exit 1
+
+      - name: Success notification
+        if: success()
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "✅ ALL E2E TESTS PASSED"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "✅ Security: Multi-tenancy & auth working"
+          echo "✅ Performance: All queries < 500ms"
+          echo "✅ Workflow: User journeys complete"
+          echo "✅ Review Queue: Coach workflows functional"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+  # Optional: Slack/Discord notification on failure
+  notify-failure:
+    name: Notify on Failure
+    runs-on: ubuntu-latest
+    needs: e2e-tests
+    if: failure()
+    steps:
+      - name: Send failure notification
+        run: |
+          echo "❌ E2E tests failed for commit ${{ github.sha }}"
+          echo "Branch: ${{ github.ref }}"
+          echo "Actor: ${{ github.actor }}"
+          # Add Slack/Discord webhook here if needed
+          # curl -X POST -H 'Content-type: application/json' \
+          #   --data '{"text":"E2E tests failed!"}' \
+          #   ${{ secrets.SLACK_WEBHOOK_URL }}
