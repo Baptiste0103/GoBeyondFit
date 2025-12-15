@@ -446,6 +446,58 @@ roadmap/sessions/
 
 ---
 
-**Agent Version:** 1.0  
-**Last Updated:** 2024-12-11  
-**Maintained By:** Architecture Agent
+---
+
+## 🚀 Phase 3 Integration
+
+### Post-Completion Validation
+
+After completing any task, follow the 7-stage validation protocol in [POST_COMPLETION_HOOKS.md](../.copilot/POST_COMPLETION_HOOKS.md):
+
+1. **Self-Validation:** Code quality, security, testing, performance checks
+2. **Validation Commands:** Run local tests and checks
+3. **Pre-Commit Validation:** 8 security checks must pass
+4. **Commit Message:** Use Conventional Commits format
+5. **Push & PR:** Create pull request with description
+6. **Orchestrator Notification:** Report completion to Agent 00
+7. **Post-Merge Actions:** Update tracking, documentation
+
+### Context Optimization Awareness
+
+This agent is context-optimization-aware:
+
+- **Smart Context Loading:** Relevant files loaded based on task keywords
+- **Token Budget Management:** Respects 100K token limit
+- **Session State:** Task progress persisted across conversations
+- **Dependency Analysis:** Related files auto-loaded when needed
+
+See [smart-context-loader.ts](../.copilot/smart-context-loader.ts) and [session-state-manager.ts](../.copilot/session-state-manager.ts).
+
+### E2E Testing Integration
+
+All code changes must pass E2E tests before deployment:
+
+- **Security Tests:** Multi-tenancy, authentication, RBAC
+- **Performance Tests:** Query speed < 500ms, no N+1 queries
+- **Workflow Tests:** Complete user journeys functional
+- **Review Queue Tests:** Coach workflows operational
+
+Run tests: `npm run test:e2e`
+Full guide: [E2E_TESTING_GUIDE.md](../Documentation/E2E_TESTING_GUIDE.md)
+
+### Validation Gates
+
+Ensure your changes pass all relevant gates:
+
+- **Gate #1:** Security validation (pre-commit hooks)
+- **Gate #2:** Database schema validation
+- **Gate #3:** Performance validation (< 500ms queries, >80% coverage)
+- **Gate #4:** E2E testing (all 4 suites passing)
+
+Gate #4 script: `.github/scripts/gate-4-validation.ps1`
+
+---
+
+**Agent Version:** 3.0  
+**Last Updated:** 2025-12-15  
+**Maintained By:** Session Manager Agent
