@@ -621,15 +621,162 @@ findAll(userId: number, filters: FilterDto) {
 
 ---
 
+## �️ PRE-IMPLEMENTATION SECURITY AUTOMATION
+
+### Pre-Commit Hook Integration
+
+**Automatic security checks run BEFORE every commit:**
+
+**Location:** `.git/hooks/pre-commit`
+
+**Checks performed:**
+1. ✅ No hardcoded secrets (passwords, API keys, tokens)
+2. ✅ No console.log in backend code (use logger)
+3. ✅ No commented authentication bypasses
+4. ✅ All Prisma queries have userId filter (multi-tenancy)
+5. ✅ No raw SQL without parameterization
+6. ✅ No .env files committed
+7. ✅ No JWT_SECRET hardcoded
+8. ✅ No database connection strings in code
+
+**How it works:**
+```bash
+# Automatic on every commit
+git commit -m "Add new feature"
+
+# Output:
+🔒 Running security pre-commit checks...
+🔍 Checking for hardcoded secrets...
+🔍 Checking for console.log statements...
+🔍 Checking Prisma queries for userId filter...
+✅ Pre-commit PASSED: All security checks OK
+```
+
+**If security issue detected:**
+```bash
+❌ BLOCKED: Prisma query without userId filter
+   All Prisma queries MUST include userId for multi-tenancy
+   ✅ prisma.exercise.findMany({ where: { userId } })
+   ❌ prisma.exercise.findMany({})
+   
+Commit cancelled - fix issues and try again
+```
+
+### SECURITY_FIRST.md Checklist
+
+**Mandatory checklist before implementing ANY feature:**
+
+**Location:** `Documentation/SECURITY_FIRST.md`
+
+**Usage:**
+```
+Before writing any code, review SECURITY_FIRST.md
+
+Checklist covers:
+- Multi-tenancy validation
+- Authentication requirements
+- Data isolation
+- SQL injection prevention
+- Input validation
+- Authorization checks
+- Sensitive data protection
+- Error handling
+```
+
+### Agent 01 Pre-Check Protocol
+
+**NEW: Stage 0 (Pre-Implementation) Security Check**
+
+**Called automatically by Orchestrator before Stage 1:**
+
+```json
+{
+  "issueNumber": 45,
+  "stage": 0,
+  "task": "Security pre-check for Exercise pagination feature",
+  "context": {
+    "feature": "Add pagination to Exercise Library",
+    "dataAccess": true,
+    "userInput": true,
+    "authentication": "required"
+  }
+}
+```
+
+**Agent 01 Response:**
+```markdown
+### 🔒 STAGE 0: Security Pre-Check COMPLETE
+
+**Agent:** @01-security-agent  
+**Feature:** Exercise pagination
+
+#### Security Requirements
+- ✅ Multi-tenancy: MANDATORY (userId filter in all queries)
+- ✅ Authentication: REQUIRED (@UseGuards(JwtAuthGuard))
+- ✅ Input Validation: REQUIRED (DTO for pagination params)
+- ⚠️  Rate Limiting: Consider for public-facing endpoints
+
+#### Implementation Guidelines
+```typescript
+// MANDATORY: userId filter
+async findAll(userId: number, filters: PaginationDto) {
+  return this.prisma.exercise.findMany({
+    where: { userId },  // REQUIRED
+    skip: (filters.page - 1) * filters.limit,
+    take: filters.limit
+  });
+}
+
+// MANDATORY: Authentication guard
+@UseGuards(JwtAuthGuard)
+@Get()
+findAll(@GetUser('id') userId: number) { ... }
+```
+
+#### Checklist for Implementation
+- [ ] Review SECURITY_FIRST.md before coding
+- [ ] All Prisma queries have userId filter
+- [ ] DTO validation for pagination params
+- [ ] Test multi-tenancy (User A cannot access User B's data)
+
+**Next:** Proceed to Stage 1 with these security requirements
+
+@00-orchestrator Security pre-check complete, requirements documented
+```
+
+### Integration with Orchestration
+
+**Stage 0 (NEW) - Pre-Implementation Security:**
+- Agent 01 reviews feature requirements
+- Identifies security requirements
+- Provides implementation guidelines
+- Documents mandatory security constraints
+- **BLOCKS workflow if critical security concerns**
+
+**Pre-Commit Hook (Automatic):**
+- Runs on every `git commit`
+- Validates code before it enters repository
+- Prevents common security mistakes
+- No manual intervention required
+
+**Benefits:**
+- ✅ Security issues caught BEFORE code is written
+- ✅ Automated enforcement (not relying on memory)
+- ✅ Fast feedback loop (pre-commit blocks immediately)
+- ✅ Consistent security standards across all features
+
+---
+
 ## 📚 Resources
 
 - [OWASP Top 10](https://owasp.org/www-project-top-ten/)
 - [NestJS Security Best Practices](https://docs.nestjs.com/security/authentication)
 - [Prisma Security](https://www.prisma.io/docs/guides/security)
 - [JWT Best Practices](https://tools.ietf.org/html/rfc8725)
+- **NEW:** [SECURITY_FIRST.md](../Documentation/SECURITY_FIRST.md)
 
 ---
 
-**Agent Version:** 2.0 (Orchestration-enabled)  
+**Agent Version:** 2.1 (Pre-commit integration + Stage 0)  
 **Last Updated:** 2025-12-15  
 **Maintained By:** Session Manager Agent

@@ -1,0 +1,164 @@
+name: Coverage Enforcer
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'backend/src/**/*.ts'
+      - 'backend/test/**/*.ts'
+      - 'backend/package.json'
+
+jobs:
+  enforce-coverage:
+    name: Enforce 80% Test Coverage
+    runs-on: ubuntu-latest
+    
+    defaults:
+      run:
+        working-directory: ./backend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests with coverage
+        run: npm run test:cov
+        continue-on-error: true
+        id: test
+
+      - name: Parse coverage report
+        id: coverage
+        run: |
+          # Extract coverage percentages from Jest output
+          COVERAGE=$(cat coverage/coverage-summary.json | jq '.total')
+          STATEMENTS=$(echo $COVERAGE | jq -r '.statements.pct')
+          BRANCHES=$(echo $COVERAGE | jq -r '.branches.pct')
+          FUNCTIONS=$(echo $COVERAGE | jq -r '.functions.pct')
+          LINES=$(echo $COVERAGE | jq -r '.lines.pct')
+          
+          echo "statements=$STATEMENTS" >> $GITHUB_OUTPUT
+          echo "branches=$BRANCHES" >> $GITHUB_OUTPUT
+          echo "functions=$FUNCTIONS" >> $GITHUB_OUTPUT
+          echo "lines=$LINES" >> $GITHUB_OUTPUT
+          
+          # Calculate average coverage
+          AVG=$(echo "scale=2; ($STATEMENTS + $BRANCHES + $FUNCTIONS + $LINES) / 4" | bc)
+          echo "average=$AVG" >> $GITHUB_OUTPUT
+          
+          # Check if coverage meets 80% threshold
+          if (( $(echo "$AVG >= 80" | bc -l) )); then
+            echo "passed=true" >> $GITHUB_OUTPUT
+          else
+            echo "passed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Comment coverage report
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const statements = '${{ steps.coverage.outputs.statements }}';
+            const branches = '${{ steps.coverage.outputs.branches }}';
+            const functions = '${{ steps.coverage.outputs.functions }}';
+            const lines = '${{ steps.coverage.outputs.lines }}';
+            const average = '${{ steps.coverage.outputs.average }}';
+            const passed = '${{ steps.coverage.outputs.passed }}' === 'true';
+            
+            const icon = passed ? '✅' : '❌';
+            const status = passed ? 'PASSED' : 'FAILED';
+            const statusIcon = passed ? '✅' : '🚫';
+            
+            const body = `## ${icon} Test Coverage Report
+            
+            **Status:** ${statusIcon} ${status} ${passed ? '(≥80% required)' : '(<80% - PR BLOCKED)'}
+            
+            | Metric | Coverage | Status |
+            |--------|----------|--------|
+            | Statements | ${statements}% | ${statements >= 80 ? '✅' : '❌'} |
+            | Branches | ${branches}% | ${branches >= 80 ? '✅' : '❌'} |
+            | Functions | ${functions}% | ${functions >= 80 ? '✅' : '❌'} |
+            | Lines | ${lines}% | ${lines >= 80 ? '✅' : '❌'} |
+            | **Average** | **${average}%** | ${passed ? '✅' : '❌'} |
+            
+            ${!passed ? `### ⚠️ Coverage Below Threshold
+            
+            Your PR does not meet the required 80% test coverage.
+            
+            **Action Required:**
+            - Add tests for uncovered code paths
+            - Aim for ≥80% coverage in all metrics
+            - Re-run tests: \`npm run test:cov\`
+            
+            **Tips:**
+            - Focus on testing business logic
+            - Use \`jest --coverage\` locally to see uncovered lines
+            - Write tests BEFORE implementing (TDD)
+            ` : `### 🎉 Excellent Coverage!
+            
+            Your PR meets the coverage requirements. Great work! 🚀
+            `}
+            
+            ---
+            
+            📊 **Full Coverage Report:** [View in Actions](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            `;
+            
+            // Find existing comment
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            
+            const existingComment = comments.find(comment => 
+              comment.user.type === 'Bot' && comment.body.includes('Test Coverage Report')
+            );
+            
+            if (existingComment) {
+              // Update existing comment
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existingComment.id,
+                body: body
+              });
+            } else {
+              // Create new comment
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body
+              });
+            }
+
+      - name: Fail if coverage below 80%
+        if: steps.coverage.outputs.passed != 'true'
+        run: |
+          echo "❌ Test coverage is below 80% threshold"
+          echo "Current: ${{ steps.coverage.outputs.average }}%"
+          echo "Required: 80%"
+          echo ""
+          echo "Add more tests to increase coverage:"
+          echo "  - Statements: ${{ steps.coverage.outputs.statements }}%"
+          echo "  - Branches: ${{ steps.coverage.outputs.branches }}%"
+          echo "  - Functions: ${{ steps.coverage.outputs.functions }}%"
+          echo "  - Lines: ${{ steps.coverage.outputs.lines }}%"
+          exit 1
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: backend/coverage
+          retention-days: 30

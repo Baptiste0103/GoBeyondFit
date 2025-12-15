@@ -90,6 +90,30 @@ else
   echo "$MISSING_USER_FILTER"
 fi
 
+# Check 6: Performance Benchmarks (NEW)
+echo ""
+echo "⚡ Running performance benchmarks..."
+if [ -f "backend/scripts/performance-check.ts" ]; then
+  cd backend
+  
+  # Compile and run performance check
+  npx ts-node scripts/performance-check.ts
+  PERF_EXIT_CODE=$?
+  
+  cd ..
+  
+  if [ $PERF_EXIT_CODE -eq 0 ]; then
+    echo "✅ All queries meet performance targets (<500ms)"
+  else
+    echo "❌ FAILED: Slow queries detected (>500ms)"
+    echo "🐢 Review performance report and optimize queries"
+    FAILED=1
+  fi
+else
+  echo "⚠️  Performance check script not found (skipping)"
+  echo "   Create backend/scripts/performance-check.ts for automated benchmarks"
+fi
+
 echo ""
 
 if [ $FAILED -eq 0 ]; then
