@@ -1,7 +1,6 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
-import * as request from 'supertest';
-import { AppModule } from '../src/app.module';
+import request = require('supertest');
+import { createTestApp, cleanupDatabase, createTestUserWithAuth } from './test-utils';
 import { PrismaService } from '../src/prisma/prisma.service';
 
 /**
@@ -19,51 +18,38 @@ describe('Performance E2E Tests', () => {
   let app: INestApplication;
   let prisma: PrismaService;
   let authToken: string;
-  let userId: number;
+  let userId: string;
   
   const queryLogs: Array<{ query: string; duration: number }> = [];
 
   beforeAll(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-
-    app = moduleFixture.createNestApplication();
-    prisma = app.get<PrismaService>(PrismaService);
+    const testApp = await createTestApp();
+    app = testApp.app;
+    prisma = testApp.prisma;
     
     // Enable query logging
-    prisma.$on('query' as any, (e: any) => {
+    (prisma as any).$on('query', (e: any) => {
       queryLogs.push({
         query: e.query,
         duration: e.duration,
       });
     });
-    
-    await app.init();
 
-    // Create test user and authenticate
-    const testUser = await prisma.user.create({
-      data: {
-        email: 'performance-test@test.com',
-        password: '$2b$10$hashedPassword',
-        role: 'CLIENT',
-      },
-    });
-    userId = testUser.id;
-
-    const loginRes = await request(app.getHttpServer())
-      .post('/api/auth/login')
-      .send({
-        email: 'performance-test@test.com',
-        password: 'TestPassword123!',
-      });
-    
-    authToken = loginRes.body.access_token;
+    // Create test user with auth
+    const user = await createTestUserWithAuth(
+      app,
+      prisma,
+      'performance-test@test.com',
+      'perfUser',
+      'TestPassword123!',
+      'coach',
+    );
+    authToken = user.token;
+    userId = user.userId;
   });
 
   afterAll(async () => {
-    // Cleanup
-    await prisma.user.delete({ where: { id: userId } });
+    await cleanupDatabase(prisma);
     await app.close();
   });
 

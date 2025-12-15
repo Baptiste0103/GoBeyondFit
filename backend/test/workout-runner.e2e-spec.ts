@@ -1,16 +1,13 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
-import request from 'supertest';
-import { App } from 'supertest/types';
-import { AppModule } from './../src/app.module';
+import request = require('supertest');
 import * as fs from 'fs';
 import * as path from 'path';
 import { PrismaService } from './../src/prisma/prisma.service';
-import { PrismaClient } from '@prisma/client';
+import { createTestApp, cleanupDatabase, createTestUserWithAuth } from './test-utils';
 
 describe('Workout Runner E2E Tests', () => {
-  let app: INestApplication<App>;
-  let prisma: any; // Use any to bypass TypeScript restrictions for Prisma client
+  let app: INestApplication;
+  let prisma: PrismaService;
   let authToken: string = '';
   let studentId: string = '';
   let workoutId: string = '';
@@ -38,51 +35,30 @@ describe('Workout Runner E2E Tests', () => {
   }
 
   beforeAll(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
+    const testApp = await createTestApp();
+    app = testApp.app;
+    prisma = testApp.prisma;
 
-    app = moduleFixture.createNestApplication();
-    await app.init();
-    prisma = app.get(PrismaService);
+    // Create test student with auth
+    const student = await createTestUserWithAuth(
+      app,
+      prisma,
+      `student-${Date.now()}@test.com`,
+      `student${Date.now()}`,
+      'TestPassword123!',
+      'student',
+    );
+    authToken = student.token;
+    studentId = student.userId;
   });
 
   afterAll(async () => {
-    // Cleanup database
-    if (studentId) {
-      try {
-        await prisma.exerciseProgress.deleteMany({
-          where: { assignedWorkout: { assignedTo: { id: studentId } } },
-        });
-        await prisma.user.delete({ where: { id: studentId } });
-      } catch (e) {
-        // Record might not exist
-      }
-    }
+    await cleanupDatabase(prisma);
     await app.close();
   });
 
   describe('1. Authentication & Setup', () => {
-    it('should register a student', async () => {
-      const response = await request(app.getHttpServer())
-        .post('/auth/signup')
-        .send({
-          email: `student-${Date.now()}@test.com`,
-          password: 'TestPassword123!',
-          firstName: 'Test',
-          lastName: 'Student',
-          role: 'student',
-        })
-        .expect(201);
-
-      expect(response.body).toHaveProperty('access_token');
-      expect(response.body).toHaveProperty('user');
-      
-      authToken = response.body.access_token;
-      studentId = response.body.user.id;
-    });
-
-    it('should authenticate successfully', async () => {
+    it('should have authenticated student', async () => {
       expect(authToken).toBeDefined();
       expect(studentId).toBeDefined();
     });

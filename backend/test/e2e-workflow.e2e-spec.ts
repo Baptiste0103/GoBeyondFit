@@ -1,7 +1,6 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
-import * as request from 'supertest';
-import { AppModule } from '../src/app.module';
+import request = require('supertest');
+import { createTestApp, cleanupDatabase, createTestUserWithAuth } from './test-utils';
 import { PrismaService } from '../src/prisma/prisma.service';
 
 /**
@@ -17,46 +16,34 @@ describe('Workflow E2E Tests', () => {
   let app: INestApplication;
   let prisma: PrismaService;
   let authToken: string;
-  let userId: number;
+  let userId: string;
 
   beforeAll(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
+    const testApp = await createTestApp();
+    app = testApp.app;
+    prisma = testApp.prisma;
 
-    app = moduleFixture.createNestApplication();
-    prisma = app.get<PrismaService>(PrismaService);
-    await app.init();
-
-    // Create test user
-    const testUser = await prisma.user.create({
-      data: {
-        email: 'workflow-test@test.com',
-        password: '$2b$10$hashedPassword',
-        role: 'CLIENT',
-      },
-    });
-    userId = testUser.id;
-
-    const loginRes = await request(app.getHttpServer())
-      .post('/api/auth/login')
-      .send({
-        email: 'workflow-test@test.com',
-        password: 'TestPassword123!',
-      });
-    
-    authToken = loginRes.body.access_token;
+    // Create test user with auth
+    const user = await createTestUserWithAuth(
+      app,
+      prisma,
+      'workflow-test@test.com',
+      'workflowUser',
+      'TestPassword123!',
+      'coach',
+    );
+    authToken = user.token;
+    userId = user.userId;
   });
 
   afterAll(async () => {
-    // Cleanup
-    await prisma.user.delete({ where: { id: userId } });
+    await cleanupDatabase(prisma);
     await app.close();
   });
 
   describe('Program Creation Workflow', () => {
-    let createdProgramId: number;
-    let createdExerciseIds: number[] = [];
+    let createdProgramId: string;
+    let createdExerciseIds: string[] = [];
 
     it('Step 1: User creates exercises for program', async () => {
       // Create multiple exercises

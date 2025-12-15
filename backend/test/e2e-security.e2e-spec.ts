@@ -1,7 +1,6 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
-import * as request from 'supertest';
-import { AppModule } from '../src/app.module';
+import request = require('supertest');
+import { createTestApp, cleanupDatabase, createTestUserWithAuth } from './test-utils';
 import { PrismaService } from '../src/prisma/prisma.service';
 
 /**
@@ -21,97 +20,76 @@ describe('Security E2E Tests', () => {
   let app: INestApplication;
   let prisma: PrismaService;
   
-  // User 1 (CLIENT)
+  // User 1 (student)
   let user1Token: string;
-  let user1Id: number;
+  let user1Id: string;
   
-  // User 2 (CLIENT)
+  // User 2 (student)
   let user2Token: string;
-  let user2Id: number;
+  let user2Id: string;
   
   // Coach user
   let coachToken: string;
-  let coachId: number;
+  let coachId: string;
   
   // Admin user
   let adminToken: string;
-  let adminId: number;
+  let adminId: string;
 
   beforeAll(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
+    const testApp = await createTestApp();
+    app = testApp.app;
+    prisma = testApp.prisma;
 
-    app = moduleFixture.createNestApplication();
-    prisma = app.get<PrismaService>(PrismaService);
-    await app.init();
+    // Create test users with auth
+    const user1 = await createTestUserWithAuth(
+      app,
+      prisma,
+      'security-user1@test.com',
+      'secUser1',
+      'password123',
+      'student',
+    );
+    user1Token = user1.token;
+    user1Id = user1.userId;
 
-    // Create test users
-    const user1 = await prisma.user.create({
-      data: {
-        email: 'security-user1@test.com',
-        password: '$2b$10$hashedPassword',
-        role: 'CLIENT',
-      },
-    });
-    user1Id = user1.id;
+    const user2 = await createTestUserWithAuth(
+      app,
+      prisma,
+      'security-user2@test.com',
+      'secUser2',
+      'password123',
+      'student',
+    );
+    user2Token = user2.token;
+    user2Id = user2.userId;
 
-    const user2 = await prisma.user.create({
-      data: {
-        email: 'security-user2@test.com',
-        password: '$2b$10$hashedPassword',
-        role: 'CLIENT',
-      },
-    });
-    user2Id = user2.id;
+    const coach = await createTestUserWithAuth(
+      app,
+      prisma,
+      'security-coach@test.com',
+      'secCoach',
+      'password123',
+      'coach',
+    );
+    coachToken = coach.token;
+    coachId = coach.userId;
 
-    const coach = await prisma.user.create({
-      data: {
-        email: 'security-coach@test.com',
-        password: '$2b$10$hashedPassword',
-        role: 'COACH',
-      },
-    });
-    coachId = coach.id;
-
-    const admin = await prisma.user.create({
-      data: {
-        email: 'security-admin@test.com',
-        password: '$2b$10$hashedPassword',
-        role: 'ADMIN',
-      },
-    });
-    adminId = admin.id;
-
-    // Authenticate all users
-    const login1 = await request(app.getHttpServer())
-      .post('/api/auth/login')
-      .send({ email: 'security-user1@test.com', password: 'TestPassword123!' });
-    user1Token = login1.body.access_token;
-
-    const login2 = await request(app.getHttpServer())
-      .post('/api/auth/login')
-      .send({ email: 'security-user2@test.com', password: 'TestPassword123!' });
-    user2Token = login2.body.access_token;
-
-    const loginCoach = await request(app.getHttpServer())
-      .post('/api/auth/login')
-      .send({ email: 'security-coach@test.com', password: 'TestPassword123!' });
-    coachToken = loginCoach.body.access_token;
-
-    const loginAdmin = await request(app.getHttpServer())
-      .post('/api/auth/login')
-      .send({ email: 'security-admin@test.com', password: 'TestPassword123!' });
-    adminToken = loginAdmin.body.access_token;
+    const admin = await createTestUserWithAuth(
+      app,
+      prisma,
+      'security-admin@test.com',
+      'secAdmin',
+      'password123',
+      'admin',
+    );
+    adminToken = admin.token;
+    adminId = admin.userId;
   });
 
   afterAll(async () => {
-    // Cleanup
-    await prisma.user.deleteMany({
-      where: {
-        email: {
-          in: [
-            'security-user1@test.com',
+    await cleanupDatabase(prisma);
+    await app.close();
             'security-user2@test.com',
             'security-coach@test.com',
             'security-admin@test.com',
