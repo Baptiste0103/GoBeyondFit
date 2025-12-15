@@ -831,7 +831,234 @@ Please choose: A, B, or C
 
 ---
 
+## 🧠 CONTEXT OPTIMIZATION (Phase 3)
+
+### Smart Context Loading
+
+**Module:** `.copilot/smart-context-loader.ts`
+
+The Orchestrator uses intelligent context loading to manage token budgets:
+
+```typescript
+import SmartContextLoader from '../smart-context-loader';
+
+// Initialize loader
+const contextLoader = new SmartContextLoader();
+
+// Load context for a task
+const context = await contextLoader.loadContext({
+  taskDescription: 'Add exercise filtering by muscle group',
+  maxTokens: 50000,  // Respect token budget
+  includeTests: true,
+  includeDocs: false,
+  priorityFiles: [
+    'backend/src/exercises/exercises.service.ts',
+    '.copilot/agents/01-security-agent.md',
+  ],
+});
+
+// Context is loaded with:
+// - Relevance scoring (most relevant files first)
+// - Dependency analysis (imports included automatically)
+// - Token budget management (stops before overflow)
+// - Caching (faster subsequent loads)
+
+console.log(`Loaded ${context.filesLoaded} files (${context.totalTokens} tokens)`);
+```
+
+**Features:**
+- **Relevance Scoring:** Keywords from task matched against file content/names
+- **Dependency Graph:** Automatically includes imported files
+- **Token Budget:** Respects maxTokens limit, loads highest priority files first
+- **Caching:** 5-minute TTL for file content (performance optimization)
+- **Type-aware:** Scores source files > tests > docs > configs
+
+**Usage in Orchestration:**
+```typescript
+// Before delegating to agent, load relevant context
+const context = await contextLoader.loadContext({
+  taskDescription: userRequest,
+  maxTokens: 80000,  // Leave room for conversation
+  includeTests: taskType === 'feature' || taskType === 'bugfix',
+  includeDocs: false,  // Only if documentation task
+  priorityFiles: requiredAgents.map(agent => `.copilot/agents/${agent}.md`),
+});
+
+// Pass context to agent
+await callAgent('05-api-agent', {
+  task: 'Implement exercise filtering',
+  context: context.files.map(f => f.filePath),
+  budget: { remaining: 80000 - context.totalTokens },
+});
+```
+
+### Session State Management
+
+**Module:** `.copilot/session-state-manager.ts`
+
+The Orchestrator persists session state across conversations:
+
+```typescript
+import SessionStateManager from '../session-state-manager';
+
+// Initialize manager
+const stateManager = new SessionStateManager();
+
+// Create session
+const session = await stateManager.createSession('baptiste', 'Complete Phase 3');
+
+// Add tasks to session
+await stateManager.addTask({
+  id: 36,
+  title: 'Create smart-context-loader.ts',
+  description: 'Intelligent context loading',
+  status: 'in-progress',
+  assignedAgent: 'agent-07-documentation',
+  deliverables: [],
+  dependencies: [],
+});
+
+// Track conversation
+await stateManager.addConversation('user', 'Create the smart context loader');
+await stateManager.addConversation('agent', 'Creating TypeScript module...', 'agent-07');
+
+// Record key decisions
+await stateManager.recordDecision({
+  description: 'Token budget strategy',
+  options: ['Fixed 50K', 'Dynamic', 'Progressive'],
+  chosen: 'Dynamic based on task',
+  rationale: 'Provides flexibility for task complexity',
+  impact: 'medium',
+});
+
+// Update task progress
+await stateManager.updateTask(36, {
+  status: 'completed',
+  progress: 100,
+});
+
+// Save session (auto-saves on updates)
+await stateManager.saveSession(session);
+```
+
+**Features:**
+- **Persistent State:** JSON files in `.copilot/state/`
+- **Resume Workflows:** Pick up from interruptions
+- **Conversation History:** Track all agent interactions
+- **Task Progress:** Monitor completion across sessions
+- **Decision Log:** Record architectural choices
+- **Context Snapshots:** Track loaded files and token usage over time
+
+**Usage in Orchestration:**
+```typescript
+// At pipeline start, create or resume session
+const session = await stateManager.resumeSession(sessionId) 
+  || await stateManager.createSession(userId, 'Implement feature X');
+
+// Track each stage
+await stateManager.updateContext(
+  loadedFiles,
+  activeAgents,
+  tokenCount,
+  'STAGE 2: Implementation in progress'
+);
+
+// Record gate results
+if (gate1Passed) {
+  await stateManager.recordDecision({
+    description: 'Gate #1 Security Validation',
+    options: ['Approve', 'Reject'],
+    chosen: 'Approve',
+    rationale: 'Multi-tenancy validated, userId filters present',
+    impact: 'high',
+  });
+}
+
+// On completion
+await stateManager.completeSession();
+```
+
+### Token Budget Monitoring
+
+**Real-time Budget Tracking:**
+
+```typescript
+interface TokenBudget {
+  total: 100000,          // Total available tokens
+  used: 42350,            // Tokens consumed so far
+  remaining: 57650,       // Available for next operations
+  breakdown: {
+    context: 28000,       // Smart context loader
+    conversation: 8000,   // Chat history
+    agentPrompts: 6350,   // Agent instructions
+  },
+  alerts: [
+    { level: 'warning', message: '50% budget consumed', at: 50000 },
+    { level: 'critical', message: '80% budget consumed', at: 80000 },
+  ]
+}
+
+// Monitor budget throughout workflow
+if (budget.remaining < 20000) {
+  // Prune context - remove low-priority files
+  const prunedContext = contextLoader.pruneContext(context, 15000);
+  await stateManager.addConversation('system', 
+    `Context pruned: ${context.files.length} → ${prunedContext.files.length} files`
+  );
+}
+```
+
+### Context Pruning Strategies
+
+**When token budget is low (< 20% remaining):**
+
+1. **Remove Low-Priority Files**
+   - Tests (if already written)
+   - Documentation (unless doc task)
+   - Config files (unless config task)
+   - Old snapshots from session
+
+2. **Summarize History**
+   - Keep last 10 conversation entries
+   - Archive older entries to session file
+   - Preserve key decisions (never prune)
+
+3. **Compress Context**
+   - Remove whitespace from code
+   - Extract only relevant functions (not entire files)
+   - Use AST parsing to identify key sections
+
+4. **Progressive Loading**
+   - Load minimal context initially
+   - Request additional files only when needed by agents
+   - Lazy-load dependencies on-demand
+
+**Example Pruning:**
+```typescript
+// When budget critical
+if (budget.remaining < 15000) {
+  // Strategy 1: Remove tests
+  context.files = context.files.filter(f => f.type !== FileType.TEST);
+  
+  // Strategy 2: Keep only top 10 relevant files
+  context.files = context.files
+    .sort((a, b) => b.relevanceScore - a.relevanceScore)
+    .slice(0, 10);
+  
+  // Strategy 3: Summarize session history
+  const summary = stateManager.getSessionSummary();
+  await stateManager.clearHistory(keepLast: 5);
+  await stateManager.addConversation('system', 
+    `Session summary: ${summary}`
+  );
+}
+```
+
+---
+
 **Dynamic Agent Management:** ENABLED ✅  
+**Context Optimization:** ENABLED ✅  
+**Session Persistence:** ENABLED ✅  
 **Auto-Detection:** ENABLED ✅  
 **Last Updated:** 2025-12-15  
-**Version:** 2.0 (Orchestration-enabled + Dynamic agent request)
+**Version:** 2.1 (Orchestration + Context Optimization)
