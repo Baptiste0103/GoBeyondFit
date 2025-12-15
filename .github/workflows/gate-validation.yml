@@ -1,0 +1,142 @@
+name: Gate Validation
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  validate-gate:
+    # Only run on orchestrated workflow issues
+    if: |
+      contains(github.event.issue.labels.*.name, 'orchestrated-workflow') &&
+      contains(github.event.comment.body, 'STAGE') &&
+      contains(github.event.comment.body, 'COMPLETE')
+    
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+      
+      - name: Install dependencies
+        run: |
+          cd backend
+          npm ci
+      
+      - name: Extract stage number
+        id: extract_stage
+        run: |
+          COMMENT_BODY="${{ github.event.comment.body }}"
+          STAGE=$(echo "$COMMENT_BODY" | grep -oP 'STAGE \K\d+' | head -1)
+          echo "stage=$STAGE" >> $GITHUB_OUTPUT
+          echo "Detected Stage: $STAGE"
+      
+      - name: Make scripts executable
+        run: chmod +x .github/scripts/*.sh
+      
+      - name: Run Gate #1 Validation
+        if: steps.extract_stage.outputs.stage == '1'
+        id: gate1
+        run: |
+          COMMENT_BODY="${{ github.event.comment.body }}"
+          bash .github/scripts/gate-1-validation.sh ${{ github.event.issue.number }} "$COMMENT_BODY"
+        continue-on-error: true
+      
+      - name: Run Gate #2 Validation
+        if: steps.extract_stage.outputs.stage == '2'
+        id: gate2
+        run: |
+          bash .github/scripts/gate-2-validation.sh ${{ github.event.issue.number }}
+        continue-on-error: true
+      
+      - name: Run Gate #3 Validation
+        if: steps.extract_stage.outputs.stage == '3'
+        id: gate3
+        run: |
+          bash .github/scripts/gate-3-validation.sh ${{ github.event.issue.number }}
+        continue-on-error: true
+      
+      - name: Run Gate #4 Validation
+        if: steps.extract_stage.outputs.stage == '4'
+        id: gate4
+        run: |
+          COMMENT_BODY="${{ github.event.comment.body }}"
+          bash .github/scripts/gate-4-validation.sh ${{ github.event.issue.number }} "$COMMENT_BODY"
+        continue-on-error: true
+      
+      - name: Comment Gate Result - PASSED
+        if: |
+          (steps.gate1.outcome == 'success' && steps.extract_stage.outputs.stage == '1') ||
+          (steps.gate2.outcome == 'success' && steps.extract_stage.outputs.stage == '2') ||
+          (steps.gate3.outcome == 'success' && steps.extract_stage.outputs.stage == '3') ||
+          (steps.gate4.outcome == 'success' && steps.extract_stage.outputs.stage == '4')
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const stage = '${{ steps.extract_stage.outputs.stage }}';
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `## 🚦 GATE #${stage}: PASSED ✅
+            
+            Stage ${stage} validation successful. Proceeding to next stage.
+            
+            **Validated:** ${new Date().toISOString()}
+            **Workflow:** github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            
+            @00-orchestrator Ready for Stage ${parseInt(stage) + 1}`
+            });
+            
+            // Add label
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              labels: [`gate-${stage}-passed`, `stage-${stage}-complete`]
+            });
+      
+      - name: Comment Gate Result - FAILED
+        if: |
+          (steps.gate1.outcome == 'failure' && steps.extract_stage.outputs.stage == '1') ||
+          (steps.gate2.outcome == 'failure' && steps.extract_stage.outputs.stage == '2') ||
+          (steps.gate3.outcome == 'failure' && steps.extract_stage.outputs.stage == '3') ||
+          (steps.gate4.outcome == 'failure' && steps.extract_stage.outputs.stage == '4')
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const stage = '${{ steps.extract_stage.outputs.stage }}';
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `## 🚦 GATE #${stage}: FAILED ❌
+            
+            Stage ${stage} validation **FAILED**. Workflow **BLOCKED**.
+            
+            **Failed:** ${new Date().toISOString()}
+            **Logs:** github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            
+            ⚠️ **Action Required:** Fix validation errors before proceeding.
+            
+            @00-orchestrator Workflow blocked at Gate #${stage}`
+            });
+            
+            // Add blocked label
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              labels: [`gate-${stage}-failed`, 'blocked']
+            });

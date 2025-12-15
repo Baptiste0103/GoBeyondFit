@@ -1,0 +1,165 @@
+name: Orchestration Tracker
+
+on:
+  schedule:
+    # Run every hour to track active workflows
+    - cron: '0 * * * *'
+  
+  workflow_dispatch:
+    # Allow manual trigger
+
+permissions:
+  issues: read
+  contents: write
+
+jobs:
+  track-workflows:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Fetch active orchestrated workflows
+        id: fetch_workflows
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'orchestrated-workflow',
+              state: 'open',
+              per_page: 100
+            });
+            
+            let activeWorkflows = [];
+            let metrics = {
+              total: issues.data.length,
+              blocked: 0,
+              inProgress: 0,
+              awaitingGate: 0,
+              avgDuration: 0
+            };
+            
+            for (const issue of issues.data) {
+              const labels = issue.labels.map(l => l.name);
+              
+              // Determine status
+              let status = 'in-progress';
+              if (labels.includes('blocked')) {
+                status = 'blocked';
+                metrics.blocked++;
+              } else if (labels.some(l => l.startsWith('gate-') && l.endsWith('-failed'))) {
+                status = 'gate-failed';
+                metrics.blocked++;
+              } else if (labels.some(l => l.startsWith('stage-') && l.endsWith('-complete'))) {
+                status = 'awaiting-gate';
+                metrics.awaitingGate++;
+              } else {
+                metrics.inProgress++;
+              }
+              
+              // Calculate duration
+              const createdAt = new Date(issue.created_at);
+              const now = new Date();
+              const durationHours = ((now - createdAt) / (1000 * 60 * 60)).toFixed(1);
+              
+              activeWorkflows.push({
+                number: issue.number,
+                title: issue.title,
+                status: status,
+                durationHours: durationHours,
+                labels: labels,
+                url: issue.html_url
+              });
+            }
+            
+            // Calculate average duration
+            if (activeWorkflows.length > 0) {
+              const totalDuration = activeWorkflows.reduce((sum, w) => sum + parseFloat(w.durationHours), 0);
+              metrics.avgDuration = (totalDuration / activeWorkflows.length).toFixed(1);
+            }
+            
+            return { workflows: activeWorkflows, metrics: metrics };
+      
+      - name: Generate Dashboard Report
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const data = ${{ steps.fetch_workflows.outputs.result }};
+            const { workflows, metrics } = data;
+            
+            let report = `# 📊 Orchestration Dashboard
+            
+            **Generated:** ${new Date().toISOString()}
+            **Period:** Last updated
+            
+            ## Metrics
+            
+            | Metric | Value | Target | Status |
+            |--------|-------|--------|--------|
+            | Active Workflows | ${metrics.total} | - | - |
+            | In Progress | ${metrics.inProgress} | - | ✅ |
+            | Blocked | ${metrics.blocked} | 0 | ${metrics.blocked === 0 ? '✅' : '⚠️'} |
+            | Awaiting Gate | ${metrics.awaitingGate} | - | - |
+            | Avg Duration | ${metrics.avgDuration}h | <4h | ${parseFloat(metrics.avgDuration) < 4 ? '✅' : '⚠️'} |
+            
+            ## Active Workflows
+            
+            `;
+            
+            if (workflows.length === 0) {
+              report += '_No active orchestrated workflows_\n';
+            } else {
+              for (const workflow of workflows) {
+                const statusEmoji = workflow.status === 'blocked' ? '🔴' : 
+                                   workflow.status === 'gate-failed' ? '🔴' :
+                                   workflow.status === 'awaiting-gate' ? '🟡' : '🟢';
+                
+                report += `### ${statusEmoji} [#${workflow.number}](${workflow.url}) - ${workflow.title}\n`;
+                report += `- **Status:** ${workflow.status}\n`;
+                report += `- **Duration:** ${workflow.durationHours}h\n`;
+                report += `- **Labels:** ${workflow.labels.join(', ')}\n\n`;
+              }
+            }
+            
+            // Detect slow workflows (>4h)
+            const slowWorkflows = workflows.filter(w => parseFloat(w.durationHours) > 4);
+            if (slowWorkflows.length > 0) {
+              report += `## ⚠️ Slow Workflows (>4h)\n\n`;
+              for (const workflow of slowWorkflows) {
+                report += `- [#${workflow.number}](${workflow.url}): ${workflow.durationHours}h\n`;
+              }
+            }
+            
+            // Detect blockers
+            const blockedWorkflows = workflows.filter(w => w.status === 'blocked' || w.status === 'gate-failed');
+            if (blockedWorkflows.length > 0) {
+              report += `\n## 🚫 Blocked Workflows\n\n`;
+              for (const workflow of blockedWorkflows) {
+                report += `- [#${workflow.number}](${workflow.url}): ${workflow.title}\n`;
+              }
+            }
+            
+            console.log(report);
+            
+            // Save to file
+            const fs = require('fs');
+            fs.writeFileSync('orchestration-dashboard.md', report);
+      
+      - name: Upload Dashboard Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: orchestration-dashboard
+          path: orchestration-dashboard.md
+          retention-days: 30
+      
+      - name: Alert on Blocked Workflows
+        if: steps.fetch_workflows.outputs.result.metrics.blocked > 0
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const data = ${{ steps.fetch_workflows.outputs.result }};
+            console.log(`⚠️ ALERT: ${data.metrics.blocked} workflows are currently blocked`);
+            // Future: Send notification (Slack, email, etc.)
