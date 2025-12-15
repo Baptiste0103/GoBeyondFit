@@ -94,23 +94,23 @@ class PerformanceChecker {
 
       // Query 1: Find all exercises
       await this.prisma.exercise.findMany({
-        where: { userId },
+        where: { ownerId: userId },
         take: 20,
       });
 
       // Query 2: Find exercise with filters
       await this.prisma.exercise.findMany({
         where: {
-          userId,
+          ownerId: userId,
           name: { contains: 'squat' },
         },
       });
 
       // Query 3: Find exercise with relations (check N+1)
       const exercises = await this.prisma.exercise.findMany({
-        where: { userId },
+        where: { ownerId: userId },
         include: {
-          user: true,
+          owner: true,
         },
         take: 10,
       });
@@ -127,11 +127,11 @@ class PerformanceChecker {
     try {
       const userId = 'test-user-id';
 
-      // Query 1: Find all programs with workouts
+      // Query 1: Find all programs with blocks
       await this.prisma.program.findMany({
-        where: { userId },
+        where: { coachId: userId },
         include: {
-          workouts: true,
+          blocks: true,
         },
         take: 10,
       });
@@ -149,13 +149,13 @@ class PerformanceChecker {
       const userId = 'test-user-id';
 
       // Query 1: Find recent sessions
-      await this.prisma.workoutSession.findMany({
-        where: { userId },
+      await this.prisma.session.findMany({
+        where: { date: { not: null } },
         include: {
-          workout: true,
-          sessionProgress: true,
+          exercises: true,
+          progress: true,
         },
-        orderBy: { startedAt: 'desc' },
+        orderBy: { date: 'desc' },
         take: 20,
       });
 
@@ -350,4 +350,4 @@ if (require.main === module) {
   main();
 }
 
-export { PerformanceChecker, PerformanceReport };
+export type { PerformanceChecker, PerformanceReport };

@@ -79,9 +79,9 @@ describe('Performance E2E Tests', () => {
       // Create test program
       const program = await prisma.program.create({
         data: {
-          name: 'Performance Test Program',
+          title: 'Performance Test Program',
           description: 'Test program for performance',
-          userId,
+          coachId: userId,
         },
       });
 
@@ -129,18 +129,31 @@ describe('Performance E2E Tests', () => {
 
   describe('N+1 Query Detection', () => {
     beforeEach(async () => {
-      // Create test data: program with multiple workouts
+      // Create test data: program with blocks, weeks, and sessions
       const program = await prisma.program.create({
         data: {
-          name: 'N+1 Test Program',
-          userId,
-          workouts: {
+          title: 'N+1 Test Program',
+          coachId: userId,
+          blocks: {
             create: [
-              { name: 'Workout 1', dayOfWeek: 1 },
-              { name: 'Workout 2', dayOfWeek: 2 },
-              { name: 'Workout 3', dayOfWeek: 3 },
-              { name: 'Workout 4', dayOfWeek: 4 },
-              { name: 'Workout 5', dayOfWeek: 5 },
+              {
+                title: 'Block 1',
+                position: 1,
+                weeks: {
+                  create: [
+                    {
+                      weekNumber: 1,
+                      position: 1,
+                      sessions: {
+                        create: [
+                          { title: 'Session 1', position: 1 },
+                          { title: 'Session 2', position: 2 },
+                        ],
+                      },
+                    },
+                  ],
+                },
+              },
             ],
           },
         },
@@ -156,16 +169,16 @@ describe('Performance E2E Tests', () => {
         .expect(200);
       
       // Analyze query patterns
-      const workoutQueries = queryLogs.filter(log => 
-        log.query.includes('Workout') && log.query.includes('SELECT')
+      const sessionQueries = queryLogs.filter(log => 
+        log.query.includes('sessions') && log.query.includes('SELECT')
       );
       
       // Should use JOIN or single query with include, not N individual queries
-      expect(workoutQueries.length).toBeLessThanOrEqual(2); // At most 2 queries (program + workouts)
+      expect(sessionQueries.length).toBeLessThanOrEqual(2); // At most 2 queries (program + sessions)
       
-      if (workoutQueries.length > 2) {
-        console.error('❌ N+1 detected: Multiple workout queries');
-        console.error('Queries:', workoutQueries.map(q => q.query));
+      if (sessionQueries.length > 2) {
+        console.error('❌ N+1 detected: Multiple session queries');
+        console.error('Queries:', sessionQueries.map(q => q.query));
       }
     });
 
@@ -191,13 +204,17 @@ describe('Performance E2E Tests', () => {
       
       // Should use Prisma's include to batch load
       const programs = await prisma.program.findMany({
-        where: { userId },
+        where: { coachId: userId },
         include: {
-          workouts: {
+          blocks: {
             include: {
-              workoutExercises: {
+              weeks: {
                 include: {
-                  exercise: true,
+                  sessions: {
+                    include: {
+                      exercises: true,
+                    },
+                  },
                 },
               },
             },
@@ -215,7 +232,7 @@ describe('Performance E2E Tests', () => {
       queryLogs.length = 0;
       
       await prisma.exercise.findMany({
-        where: { userId },
+        where: { ownerId: userId },
       });
       
       const exerciseQuery = queryLogs.find(log => log.query.includes('Exercise'));
@@ -230,7 +247,7 @@ describe('Performance E2E Tests', () => {
       queryLogs.length = 0;
       
       await prisma.program.findMany({
-        where: { userId },
+        where: { coachId: userId },
       });
       
       const programQuery = queryLogs.find(log => log.query.includes('Program'));
@@ -245,8 +262,8 @@ describe('Performance E2E Tests', () => {
       
       await prisma.session.findMany({
         where: {
-          userId,
-          status: 'IN_PROGRESS',
+          // Sessions don't have userId directly
+          date: { not: null },
         },
       });
       
@@ -263,11 +280,11 @@ describe('Performance E2E Tests', () => {
       queryLogs.length = 0;
       
       await prisma.exercise.findMany({
-        where: { userId },
+        where: { ownerId: userId },
         select: {
           id: true,
           name: true,
-          muscleGroup: true,
+          type: true,
         },
       });
       
@@ -283,7 +300,7 @@ describe('Performance E2E Tests', () => {
       queryLogs.length = 0;
       
       await prisma.exercise.findMany({
-        where: { userId },
+        where: { ownerId: userId },
         take: 20,
         skip: 0,
       });
@@ -307,9 +324,9 @@ describe('Performance E2E Tests', () => {
       // Good: Batch create
       await prisma.exercise.createMany({
         data: [
-          { name: 'Ex 1', userId, muscleGroup: 'CHEST' },
-          { name: 'Ex 2', userId, muscleGroup: 'BACK' },
-          { name: 'Ex 3', userId, muscleGroup: 'LEGS' },
+          { name: 'Ex 1', ownerId: userId, type: 'standard', scope: 'coach', description: 'Test' },
+          { name: 'Ex 2', ownerId: userId, type: 'standard', scope: 'coach', description: 'Test' },
+          { name: 'Ex 3', ownerId: userId, type: 'standard', scope: 'coach', description: 'Test' },
         ],
       });
       

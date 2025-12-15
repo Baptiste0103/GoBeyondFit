@@ -125,16 +125,17 @@ describe('Security E2E Tests', () => {
   });
 
   describe('Multi-Tenant Data Isolation - Exercises', () => {
-    let user1ExerciseId: number;
-    let user2ExerciseId: number;
+    let user1ExerciseId: string;
+    let user2ExerciseId: string;
 
     beforeAll(async () => {
       // Create exercises for both users
       const ex1 = await prisma.exercise.create({
         data: {
           name: 'User1 Exercise',
-          muscleGroup: 'CHEST',
-          userId: user1Id,
+          type: 'standard',
+          scope: 'coach',
+          ownerId: user1Id,
         },
       });
       user1ExerciseId = ex1.id;
@@ -142,8 +143,9 @@ describe('Security E2E Tests', () => {
       const ex2 = await prisma.exercise.create({
         data: {
           name: 'User2 Exercise',
-          muscleGroup: 'BACK',
-          userId: user2Id,
+          type: 'standard',
+          scope: 'coach',
+          ownerId: user2Id,
         },
       });
       user2ExerciseId = ex2.id;
@@ -201,7 +203,7 @@ describe('Security E2E Tests', () => {
       const exercise = await prisma.exercise.findUnique({
         where: { id: user2ExerciseId },
       });
-      expect(exercise.name).toBe('User2 Exercise'); // NOT 'Hacked Exercise'
+      expect(exercise?.name).toBe('User2 Exercise'); // NOT 'Hacked Exercise'
     });
 
     it('🔒 CRITICAL: User 1 cannot delete User 2 exercise', async () => {
@@ -219,22 +221,22 @@ describe('Security E2E Tests', () => {
   });
 
   describe('Multi-Tenant Data Isolation - Programs', () => {
-    let user1ProgramId: number;
-    let user2ProgramId: number;
+    let user1ProgramId: string;
+    let user2ProgramId: string;
 
     beforeAll(async () => {
       const prog1 = await prisma.program.create({
         data: {
-          name: 'User1 Program',
-          userId: user1Id,
+          title: 'User1 Program',
+          coachId: user1Id,
         },
       });
       user1ProgramId = prog1.id;
 
       const prog2 = await prisma.program.create({
         data: {
-          name: 'User2 Program',
-          userId: user2Id,
+          title: 'User2 Program',
+          coachId: user2Id,
         },
       });
       user2ProgramId = prog2.id;
@@ -270,55 +272,85 @@ describe('Security E2E Tests', () => {
   });
 
   describe('Multi-Tenant Data Isolation - Sessions', () => {
-    let user1SessionId: number;
-    let user2SessionId: number;
+    let user1SessionId: string;
+    let user2SessionId: string;
 
     beforeAll(async () => {
-      // Create programs and workouts for sessions
+      // Create programs with proper structure for sessions
       const prog1 = await prisma.program.create({
         data: {
-          name: 'Session Program 1',
-          userId: user1Id,
-          workouts: {
-            create: { name: 'Workout 1', dayOfWeek: 1 },
+          title: 'Session Program 1',
+          coachId: user1Id,
+          blocks: {
+            create: {
+              title: 'Block 1',
+              position: 1,
+              weeks: {
+                create: {
+                  weekNumber: 1,
+                  position: 1,
+                  sessions: {
+                    create: { title: 'Session 1', position: 1 },
+                  },
+                },
+              },
+            },
           },
         },
-        include: { workouts: true },
+        include: {
+          blocks: {
+            include: {
+              weeks: {
+                include: {
+                  sessions: true,
+                },
+              },
+            },
+          },
+        },
       });
 
       const prog2 = await prisma.program.create({
         data: {
-          name: 'Session Program 2',
-          userId: user2Id,
-          workouts: {
-            create: { name: 'Workout 2', dayOfWeek: 2 },
+          title: 'Session Program 2',
+          coachId: user2Id,
+          blocks: {
+            create: {
+              title: 'Block 2',
+              position: 1,
+              weeks: {
+                create: {
+                  weekNumber: 1,
+                  position: 1,
+                  sessions: {
+                    create: { title: 'Session 2', position: 1 },
+                  },
+                },
+              },
+            },
           },
         },
-        include: { workouts: true },
-      });
-
-      const sess1 = await prisma.session.create({
-        data: {
-          userId: user1Id,
-          workoutId: prog1.workouts[0].id,
-          programId: prog1.id,
-          status: 'COMPLETED',
-          startedAt: new Date(),
-          completedAt: new Date(),
+        include: {
+          blocks: {
+            include: {
+              weeks: {
+                include: {
+                  sessions: true,
+                },
+              },
+            },
+          },
         },
       });
+
+      const sess1 = prog1.blocks[0]?.weeks[0]?.sessions[0];
+      const sess2 = prog2.blocks[0]?.weeks[0]?.sessions[0];
+
+      if (!sess1 || !sess2) {
+        throw new Error('Sessions not created');
+      }
+
       user1SessionId = sess1.id;
-
-      const sess2 = await prisma.session.create({
-        data: {
-          userId: user2Id,
-          workoutId: prog2.workouts[0].id,
-          programId: prog2.id,
-          status: 'COMPLETED',
-          startedAt: new Date(),
-          completedAt: new Date(),
-        },
-      });
       user2SessionId = sess2.id;
     });
 
@@ -378,7 +410,7 @@ describe('Security E2E Tests', () => {
       const user = await prisma.user.findUnique({
         where: { id: user1Id },
       });
-      expect(user.role).toBe('CLIENT'); // NOT 'ADMIN'
+      expect(user?.role).toBe('student'); // NOT 'admin'
     });
   });
 
@@ -403,39 +435,41 @@ describe('Security E2E Tests', () => {
       const maliciousInput = "' OR 1=1 --";
       
       const response = await request(app.getHttpServer())
-        .get(`/api/exercises?muscleGroup=${encodeURIComponent(maliciousInput)}`)
+        .get(`/api/exercises?type=${encodeURIComponent(maliciousInput)}`)
         .set('Authorization', `Bearer ${user1Token}`)
         .expect(200);
       
-      // Should not bypass userId filter
+      // Should not bypass ownerId filter
       response.body.forEach(exercise => {
-        expect(exercise.userId).toBe(user1Id); // Still filtered by userId
+        expect(exercise.ownerId).toBe(user1Id); // Still filtered by ownerId
       });
     });
   });
 
   describe('Mass Assignment Protection', () => {
-    it('🔒 CRITICAL: Cannot set userId via API', async () => {
+    it('🔒 CRITICAL: Cannot set ownerId via API', async () => {
       const response = await request(app.getHttpServer())
         .post('/api/exercises')
         .set('Authorization', `Bearer ${user1Token}`)
         .send({
           name: 'Test Exercise',
-          muscleGroup: 'CHEST',
-          userId: user2Id, // Try to create exercise for another user
+          type: 'standard',
+          scope: 'coach',
+          ownerId: user2Id, // Try to create exercise for another user
         })
         .expect(201);
       
-      // Should ignore userId in body, use token userId
-      expect(response.body.userId).toBe(user1Id); // NOT user2Id
+      // Should ignore ownerId in body, use token userId
+      expect(response.body.ownerId).toBe(user1Id); // NOT user2Id
     });
 
-    it('🔒 CRITICAL: Cannot change userId via update', async () => {
+    it('🔒 CRITICAL: Cannot change ownerId via update', async () => {
       const exercise = await prisma.exercise.create({
         data: {
           name: 'Ownership Test',
-          muscleGroup: 'LEGS',
-          userId: user1Id,
+          type: 'standard',
+          scope: 'coach',
+          ownerId: user1Id,
         },
       });
 
@@ -444,15 +478,15 @@ describe('Security E2E Tests', () => {
         .set('Authorization', `Bearer ${user1Token}`)
         .send({
           name: 'Updated Exercise',
-          userId: user2Id, // Try to change ownership
+          ownerId: user2Id, // Try to change ownership
         })
         .expect(200);
       
-      // Verify userId unchanged
+      // Verify ownerId unchanged
       const updated = await prisma.exercise.findUnique({
         where: { id: exercise.id },
       });
-      expect(updated.userId).toBe(user1Id); // Still owned by user1
+      expect(updated?.ownerId).toBe(user1Id); // Still owned by user1
     });
   });
 

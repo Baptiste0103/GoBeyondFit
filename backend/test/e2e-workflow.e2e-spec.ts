@@ -171,28 +171,52 @@ describe('Workflow E2E Tests', () => {
   });
 
   describe('Workout Session Workflow', () => {
-    let programId: number;
-    let workoutId: number;
-    let sessionId: number;
+    let programId: string;
+    let sessionId: string;
 
     beforeAll(async () => {
       // Setup: Create program with workout
       const program = await prisma.program.create({
         data: {
-          name: 'Session Test Program',
-          userId,
-          workouts: {
+          title: 'Session Test Program',
+          coachId: userId,
+          blocks: {
             create: {
-              name: 'Test Workout',
-              dayOfWeek: 1,
+              title: 'Test Block',
+              position: 1,
+              weeks: {
+                create: {
+                  weekNumber: 1,
+                  position: 1,
+                  sessions: {
+                    create: {
+                      title: 'Test Session',
+                      position: 1,
+                    },
+                  },
+                },
+              },
             },
           },
         },
-        include: { workouts: true },
+        include: { 
+          blocks: {
+            include: {
+              weeks: {
+                include: {
+                  sessions: true,
+                },
+              },
+            },
+          },
+        },
       });
       
       programId = program.id;
-      workoutId = program.workouts[0].id;
+      const session = program.blocks[0]?.weeks[0]?.sessions[0];
+      if (session) {
+        sessionId = session.id;
+      }
     });
 
     it('Step 1: User starts a workout session', async () => {
@@ -200,7 +224,7 @@ describe('Workflow E2E Tests', () => {
         .post('/api/sessions/start')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
-          workoutId,
+          sessionId,
           programId,
         })
         .expect(201);
@@ -209,7 +233,7 @@ describe('Workflow E2E Tests', () => {
       expect(response.body.status).toBe('IN_PROGRESS');
       expect(response.body.userId).toBe(userId);
       
-      sessionId = response.body.id;
+      const newSessionId = response.body.id;
     });
 
     it('Step 2: User logs exercise progress', async () => {

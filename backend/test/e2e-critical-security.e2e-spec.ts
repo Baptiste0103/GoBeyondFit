@@ -293,10 +293,8 @@ describe('CRITICAL Security E2E Tests', () => {
         data: {
           session: { connect: { id: sessionA.id } },
           student: { connect: { id: studentAId } },
-          status: 'completed',
-          blockNumber: 1,
-          weekNumber: 1,
-          sessionNumber: 1,
+          progress: { exercises: [] },
+          reviewStatus: 'reviewed',
         },
       });
     });

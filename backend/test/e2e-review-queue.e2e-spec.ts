@@ -1,8 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
-import * as request from 'supertest';
+import request = require('supertest');
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { createTestApp, cleanupDatabase, createTestUserWithAuth } from './test-utils';
 
 /**
  * E2E Test Suite: Coach Review Queue
@@ -19,54 +20,44 @@ describe('Review Queue E2E Tests', () => {
   let prisma: PrismaService;
   let coachToken: string;
   let clientToken: string;
-  let coachId: number;
-  let clientId: number;
+  let coachId: string;
+  let clientId: string;
+  let userId: string;
 
   beforeAll(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-
-    app = moduleFixture.createNestApplication();
-    prisma = app.get<PrismaService>(PrismaService);
-    await app.init();
+    const testApp = await createTestApp();
+    app = testApp.app;
+    prisma = testApp.prisma;
 
     // Create coach user
-    const coach = await prisma.user.create({
-      data: {
-        email: 'coach@test.com',
-        password: '$2b$10$hashedPassword',
-        role: 'COACH',
-      },
-    });
-    coachId = coach.id;
+    const coach = await createTestUserWithAuth(
+      app,
+      prisma,
+      'coach-review@test.com',
+      'CoachReview',
+      'TestPassword123!',
+      'coach',
+    );
+    coachId = coach.userId;
+    coachToken = coach.token;
 
     // Create client user
-    const client = await prisma.user.create({
-      data: {
-        email: 'client@test.com',
-        password: '$2b$10$hashedPassword',
-        role: 'CLIENT',
-      },
-    });
-    clientId = client.id;
-
-    // Authenticate both users
-    const coachLogin = await request(app.getHttpServer())
-      .post('/api/auth/login')
-      .send({ email: 'coach@test.com', password: 'TestPassword123!' });
-    coachToken = coachLogin.body.access_token;
-
-    const clientLogin = await request(app.getHttpServer())
-      .post('/api/auth/login')
-      .send({ email: 'client@test.com', password: 'TestPassword123!' });
-    clientToken = clientLogin.body.access_token;
+    const client = await createTestUserWithAuth(
+      app,
+      prisma,
+      'client-review@test.com',
+      'ClientReview',
+      'TestPassword123!',
+      'student',
+    );
+    clientId = client.userId;
+    clientToken = client.token;
+    userId = coachId;
   });
 
   afterAll(async () => {
     // Cleanup
-    await prisma.user.delete({ where: { id: coachId } });
-    await prisma.user.delete({ where: { id: clientId } });
+    await cleanupDatabase(prisma);
     await app.close();
   });
 
@@ -98,32 +89,58 @@ describe('Review Queue E2E Tests', () => {
   });
 
   describe('Session Submission and Review', () => {
-    let sessionId: number;
+    let sessionId: string;
 
     beforeAll(async () => {
-      // Client creates and completes a session
+      // Create a test program with proper structure
       const program = await prisma.program.create({
         data: {
-          name: 'Review Test Program',
-          userId: clientId,
-          workouts: {
+          title: 'Review Test Program',
+          coachId: coachId,
+          blocks: {
             create: {
-              name: 'Review Test Workout',
-              dayOfWeek: 1,
+              title: 'Review Block',
+              position: 1,
+              weeks: {
+                create: {
+                  weekNumber: 1,
+                  position: 1,
+                  sessions: {
+                    create: {
+                      title: 'Review Session',
+                      position: 1,
+                    },
+                  },
+                },
+              },
             },
           },
         },
-        include: { workouts: true },
+        include: {
+          blocks: {
+            include: {
+              weeks: {
+                include: {
+                  sessions: true,
+                },
+              },
+            },
+          },
+        },
       });
 
-      const session = await prisma.session.create({
+      const session = program.blocks[0]?.weeks[0]?.sessions[0];
+      if (!session) {
+        throw new Error('Session not created');
+      }
+
+      // Create session progress for the client
+      await prisma.sessionProgress.create({
         data: {
-          userId: clientId,
-          workoutId: program.workouts[0].id,
-          programId: program.id,
-          status: 'COMPLETED',
-          startedAt: new Date(),
-          completedAt: new Date(),
+          sessionId: session.id,
+          studentId: clientId,
+          progress: { exercises: [] },
+          reviewStatus: 'pending',
         },
       });
       
@@ -188,35 +205,56 @@ describe('Review Queue E2E Tests', () => {
       // Create multiple sessions with different statuses
       const program = await prisma.program.create({
         data: {
-          name: 'Filter Test Program',
-          userId: clientId,
-          workouts: {
-            create: [
-              { name: 'Workout 1', dayOfWeek: 1 },
-              { name: 'Workout 2', dayOfWeek: 2 },
-            ],
+          title: 'Filter Test Program',
+          coachId: coachId,
+          blocks: {
+            create: {
+              title: 'Filter Block',
+              position: 1,
+              weeks: {
+                create: [{
+                  weekNumber: 1,
+                  position: 1,
+                  sessions: {
+                    create: [
+                      { title: 'Session 1', position: 1, date: new Date('2025-12-01') },
+                      { title: 'Session 2', position: 2, date: new Date('2025-12-08') },
+                    ],
+                  },
+                }],
+              },
+            },
           },
         },
-        include: { workouts: true },
+        include: {
+          blocks: {
+            include: {
+              weeks: {
+                include: {
+                  sessions: true,
+                },
+              },
+            },
+          },
+        },
       });
 
-      await prisma.session.createMany({
+      const sessions = program.blocks[0]?.weeks[0]?.sessions || [];
+      
+      // Create progress for both sessions
+      await prisma.sessionProgress.createMany({
         data: [
           {
-            userId: clientId,
-            workoutId: program.workouts[0].id,
-            programId: program.id,
-            status: 'PENDING_REVIEW',
-            startedAt: new Date('2025-12-01'),
-            completedAt: new Date('2025-12-01'),
+            sessionId: sessions[0].id,
+            studentId: clientId,
+            progress: { exercises: [] },
+            reviewStatus: 'pending',
           },
           {
-            userId: clientId,
-            workoutId: program.workouts[1].id,
-            programId: program.id,
-            status: 'APPROVED',
-            startedAt: new Date('2025-12-08'),
-            completedAt: new Date('2025-12-08'),
+            sessionId: sessions[1].id,
+            studentId: clientId,
+            progress: { exercises: [] },
+            reviewStatus: 'reviewed',
           },
         ],
       });
@@ -347,55 +385,59 @@ describe('Review Queue E2E Tests', () => {
   });
 
   describe('Batch Operations', () => {
-    let sessionIds: number[] = [];
+    let sessionIds: string[] = [];
 
     beforeAll(async () => {
       // Create multiple sessions for batch testing
       const program = await prisma.program.create({
         data: {
-          name: 'Batch Test Program',
-          userId: clientId,
-          workouts: {
-            create: { name: 'Batch Workout', dayOfWeek: 1 },
+          title: 'Batch Test Program',
+          coachId: coachId,
+          blocks: {
+            create: {
+              title: 'Batch Block',
+              position: 1,
+              weeks: {
+                create: {
+                  weekNumber: 1,
+                  position: 1,
+                  sessions: {
+                    create: [
+                      { title: 'Batch Session 1', position: 1 },
+                      { title: 'Batch Session 2', position: 2 },
+                      { title: 'Batch Session 3', position: 3 },
+                    ],
+                  },
+                },
+              },
+            },
           },
         },
-        include: { workouts: true },
+        include: {
+          blocks: {
+            include: {
+              weeks: {
+                include: {
+                  sessions: true,
+                },
+              },
+            },
+          },
+        },
       });
 
-      const sessions = await prisma.session.createMany({
-        data: [
-          {
-            userId: clientId,
-            workoutId: program.workouts[0].id,
-            programId: program.id,
-            status: 'PENDING_REVIEW',
-            startedAt: new Date(),
-            completedAt: new Date(),
-          },
-          {
-            userId: clientId,
-            workoutId: program.workouts[0].id,
-            programId: program.id,
-            status: 'PENDING_REVIEW',
-            startedAt: new Date(),
-            completedAt: new Date(),
-          },
-          {
-            userId: clientId,
-            workoutId: program.workouts[0].id,
-            programId: program.id,
-            status: 'PENDING_REVIEW',
-            startedAt: new Date(),
-            completedAt: new Date(),
-          },
-        ],
-      });
+      const sessions = program.blocks[0]?.weeks[0]?.sessions || [];
+      sessionIds = sessions.map(s => s.id);
 
-      // Get created session IDs
-      const allSessions = await prisma.session.findMany({
-        where: { userId: clientId, status: 'PENDING_REVIEW' },
+      // Create progress for all sessions
+      await prisma.sessionProgress.createMany({
+        data: sessions.map(session => ({
+          sessionId: session.id,
+          studentId: clientId,
+          progress: { exercises: [] },
+          reviewStatus: 'pending',
+        })),
       });
-      sessionIds = allSessions.map(s => s.id);
     });
 
     it('should approve multiple sessions at once', async () => {
