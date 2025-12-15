@@ -90,14 +90,6 @@ describe('Security E2E Tests', () => {
   afterAll(async () => {
     await cleanupDatabase(prisma);
     await app.close();
-            'security-user2@test.com',
-            'security-coach@test.com',
-            'security-admin@test.com',
-          ],
-        },
-      },
-    });
-    await app.close();
   });
 
   describe('Authentication', () => {
