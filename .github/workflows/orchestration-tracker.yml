@@ -3,7 +3,7 @@ name: Orchestration Tracker
 on:
   schedule:
     # Run every hour to track active workflows
-    - cron: '0 * * * *'
+    - cron: '-'
   
   workflow_dispatch:
     # Allow manual trigger
